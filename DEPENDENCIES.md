@@ -17,12 +17,15 @@ Nenhuma ainda. Candidatas da fase 0, a conferir antes de entrar:
 
 Não são distribuídas com o app.
 
-| Pacote             | Licença    | Uso                            |
-| ------------------ | ---------- | ------------------------------ |
-| typescript         | Apache-2.0 | compilador                     |
-| eslint, @eslint/js | MIT        | lint                           |
-| typescript-eslint  | MIT        | lint de TypeScript             |
-| prettier           | MIT        | formatação                     |
-| vitest             | MIT        | testes                         |
-| vite               | MIT        | servidor e build do playground |
-| @types/node        | MIT        | tipos do Node para scripts     |
+| Pacote             | Licença           | Uso                                        |
+| ------------------ | ----------------- | ------------------------------------------ |
+| typescript         | Apache-2.0        | compilador                                 |
+| eslint, @eslint/js | MIT               | lint                                       |
+| typescript-eslint  | MIT               | lint de TypeScript                         |
+| prettier           | MIT               | formatação                                 |
+| vitest             | MIT               | testes                                     |
+| vite               | MIT               | servidor e build do playground             |
+| @types/node        | MIT               | tipos do Node para scripts                 |
+| electron           | MIT               | shell do spike 4 (`spikes/shell-electron`) |
+| @tauri-apps/cli    | Apache-2.0 OR MIT | build do shell do spike 4                  |
+| tauri (crate Rust) | Apache-2.0 OR MIT | shell do spike 4 (`spikes/shell-tauri`)    |

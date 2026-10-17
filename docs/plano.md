@@ -7,7 +7,7 @@ O plano detalhado está no documento [Plano de início do desenvolvimento](https
    1. Reprodução sincronizada de duas faixas pelo relógio do `AudioContext`.
    2. Automação de volume, EQ e filtro sem estalos.
    3. Time-stretch: Rubber Band vs SoundTouch, aplicado offline, em 4% e 8%.
-   4. Shell desktop: Electron vs Tauri.
+   4. Shell desktop: Electron vs Tauri (decidido: Electron, ver [decisoes/0008](decisoes/0008-spike-4-shell.md)).
    5. Análise: acerto do Essentia.js em BPM e primeira batida.
 3. **Ponte:** interface `Engine`, schema JSON v1 e teste de render offline no CI.
 4. **Fase 1** em fatias verticais: esqueleto do app, importar e analisar, editor de beatgrid, grupo tocando, editor de transição, presets, set e export.

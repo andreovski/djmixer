@@ -1,0 +1,15 @@
+{
+  "name": "@djmixer/spike-shell-electron",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "baixar-electron": "node node_modules/electron/install.js",
+    "probe": "PROBE_KEEP_OPEN=1 electron ."
+  },
+  "devDependencies": {
+    "electron": "44.9.0"
+  }
+}

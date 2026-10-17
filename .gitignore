@@ -7,3 +7,4 @@ coverage/
 # Áudio nunca entra no repositório (ver fixtures/README.md)
 fixtures/audio/
 fixtures/synthetic/
+apps/playground/public/codecs/

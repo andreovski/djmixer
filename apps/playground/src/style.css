@@ -48,3 +48,21 @@ canvas {
 .lanes p {
   margin: 0.5rem 0 0.25rem;
 }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+  vertical-align: top;
+}
+tr.ok td:nth-child(2) {
+  color: #2a9d4b;
+}
+tr.falha td:nth-child(2) {
+  color: #d1453b;
+}

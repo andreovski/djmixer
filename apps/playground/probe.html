@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>djmixer: sondagem do shell</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Spike 4: o motor neste navegador ou shell</h1>
+      <p class="hint">
+        Roda relógio, AudioWorklet, render offline, automação, time-stretch em WASM e decodificação
+        de cada formato. Com <code>?auto=1</code> a sondagem começa sozinha e entrega o relatório ao
+        shell.
+      </p>
+      <p id="shell"></p>
+      <button id="run">Rodar a sondagem</button>
+      <table id="results">
+        <thead>
+          <tr>
+            <th>Teste</th>
+            <th>Resultado</th>
+            <th>Detalhe</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <pre id="json" hidden></pre>
+    </main>
+    <script type="module" src="./src/probe-main.ts"></script>
+  </body>
+</html>
