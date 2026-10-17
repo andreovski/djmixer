@@ -7,7 +7,7 @@
   "main": "main.js",
   "scripts": {
     "setup": "node node_modules/electron/install.js",
-    "probe": "electron ."
+    "probe": "PROBE_KEEP_OPEN=1 electron ."
   },
   "devDependencies": {
     "electron": "44.9.0"

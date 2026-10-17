@@ -5,8 +5,8 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "probe": "tauri dev --no-watch --no-dev-server-wait",
     "compile": "tauri build --debug --no-bundle",
+    "probe": "pnpm compile && PROBE_KEEP_OPEN=1 ./src-tauri/target/debug/djmixer-spike-shell-tauri",
     "tauri": "tauri"
   },
   "devDependencies": {

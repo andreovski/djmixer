@@ -327,7 +327,8 @@ const CODECS: [string, string][] = [
 async function decode(label: string, file: string): Promise<ProbeResult> {
   const id = `decodificar-${file}`
   const response = await fetch(new URL(`codecs/${file}`, document.baseURI).href).catch(() => null)
-  if (!response?.ok) {
+  // O Tauri responde a um arquivo ausente com a página inicial, por isso o tipo também conta.
+  if (!response?.ok || response.headers.get('content-type')?.includes('text/html')) {
     return {
       id,
       label: `Decodificar ${label}`,
