@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@djmixer/engine": "workspace:*",
-    "@djmixer/shared": "workspace:*"
+    "@djmixer/shared": "workspace:*",
+    "rubberband-wasm": "3.3.0"
   }
 }

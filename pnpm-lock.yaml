@@ -38,6 +38,9 @@ importers:
       '@djmixer/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      rubberband-wasm:
+        specifier: 3.3.0
+        version: 3.3.0
     devDependencies:
       vite:
         specifier: ^8.3.4
@@ -54,7 +57,16 @@ importers:
       '@djmixer/shared':
         specifier: workspace:*
         version: link:../shared
+      '@soundtouchjs/core':
+        specifier: 2.1.1
+        version: 2.1.1
+      rubberband-wasm:
+        specifier: 3.3.0
+        version: 3.3.0
     devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
       node-web-audio-api:
         specifier: ^2.2.0
         version: 2.2.0
@@ -242,6 +254,12 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@soundtouchjs/core@2.1.1':
+    resolution: {integrity: sha512-ccBiG9/zHdM1Sx1RUkXWBgRYFI1HCiUHHwRK8gAvVNgmcafBgUzRP6Czn7pUPcHgSQus+i3Eu3DlfBR24wqspA==}
+
+  '@soundtouchjs/interpolation-strategy-lanczos@2.1.1':
+    resolution: {integrity: sha512-EX4qVLnOJ9pKfL7iSPJSJDKDAoZ4d7JO7KTKMPVo2XIhlmT/2hTZC5dWL/R9Jv3XC7kyQeteeGcogWP6DPi47A==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -705,6 +723,9 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
+  rubberband-wasm@3.3.0:
+    resolution: {integrity: sha512-N0aABkKa1Cuxh/OiK9wHAuO7K/brSCOlHHNwlYfpAgTRtQPZFFxNr20NbsQyokVkw+1mZMcw+cT+3svHG6tPQQ==}
+
   semver@7.8.5:
     resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
     engines: {node: '>=10'}
@@ -1004,6 +1025,12 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@soundtouchjs/core@2.1.1':
+    dependencies:
+      '@soundtouchjs/interpolation-strategy-lanczos': 2.1.1
+
+  '@soundtouchjs/interpolation-strategy-lanczos@2.1.1': {}
 
   '@types/chai@5.2.3':
     dependencies:
@@ -1469,6 +1496,8 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.14
       '@rolldown/binding-win32-arm64-msvc': 1.2.14
       '@rolldown/binding-win32-x64-msvc': 1.2.14
+
+  rubberband-wasm@3.3.0: {}
 
   semver@7.8.5: {}
 

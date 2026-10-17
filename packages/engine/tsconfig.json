@@ -1,4 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Só os testes usam APIs do Node (para carregar o WASM do disco).
+    "types": ["node"]
+  },
   "include": ["src"]
 }

@@ -8,7 +8,7 @@
   </head>
   <body>
     <main>
-      <h1>Spikes 1 e 2: sincronia e automação</h1>
+      <h1>Fase 0: sincronia, automação e time-stretch</h1>
       <p class="hint">
         Sem arquivos, o playground usa duas faixas sintéticas (124 e 128 BPM). Com as suas faixas,
         informe o BPM e o segundo da primeira batida de cada uma e ligue o metrônomo para conferir o
@@ -56,6 +56,15 @@
           >Transição
           <select id="transition"></select
         ></label>
+        <label
+          >Casar o BPM
+          <select id="stretch">
+            <option value="varispeed">Velocidade (o tom muda)</option>
+            <option value="rubberband-r3" selected>Rubber Band R3 (key lock)</option>
+            <option value="rubberband-r2">Rubber Band R2 (key lock)</option>
+            <option value="soundtouch">SoundTouch (key lock)</option>
+          </select>
+        </label>
         <label
           >EQ
           <select id="eq">
