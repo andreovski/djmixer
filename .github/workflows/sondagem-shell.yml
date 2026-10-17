@@ -51,7 +51,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm fixtures:codecs
       - run: pnpm --filter @djmixer/playground build
-      # O binário vem direto do release do Electron; o instalador do pacote falhou no CI.
+      # O binário vem direto do release do Electron, sem passar pelo instalador do pacote.
       - name: Baixar o Electron
         shell: bash
         run: |

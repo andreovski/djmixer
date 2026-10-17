@@ -6,7 +6,7 @@
   "type": "module",
   "main": "main.js",
   "scripts": {
-    "setup": "node node_modules/electron/install.js",
+    "baixar-electron": "node node_modules/electron/install.js",
     "probe": "PROBE_KEEP_OPEN=1 electron ."
   },
   "devDependencies": {
