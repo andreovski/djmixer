@@ -13,6 +13,7 @@
     "vite": "^8.3.4"
   },
   "dependencies": {
+    "@djmixer/engine": "workspace:*",
     "@djmixer/shared": "workspace:*"
   }
 }

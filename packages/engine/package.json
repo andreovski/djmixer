@@ -12,5 +12,8 @@
   },
   "dependencies": {
     "@djmixer/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "node-web-audio-api": "^2.2.0"
   }
 }
