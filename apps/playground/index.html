@@ -19,6 +19,7 @@
         <fieldset id="track-a">
           <legend>Faixa A (sai)</legend>
           <label>Arquivo <input type="file" accept="audio/*" data-field="file" /></label>
+          <button type="button" data-field="analyze">Analisar BPM, batida e tonalidade</button>
           <label>BPM <input type="number" step="0.01" value="124" data-field="bpm" /></label>
           <label
             >Primeira batida (s) <input type="number" step="0.001" value="0" data-field="firstBeat"
@@ -31,6 +32,7 @@
         <fieldset id="track-b">
           <legend>Faixa B (entra)</legend>
           <label>Arquivo <input type="file" accept="audio/*" data-field="file" /></label>
+          <button type="button" data-field="analyze">Analisar BPM, batida e tonalidade</button>
           <label>BPM <input type="number" step="0.01" value="128" data-field="bpm" /></label>
           <label
             >Primeira batida (s)
@@ -49,6 +51,13 @@
         <label>Transição (compassos) <input id="bars" type="number" value="16" /></label>
         <label>Tocar a partir do beat <input id="from-beat" type="number" value="48" /></label>
         <label><input id="metronome" type="checkbox" /> Metrônomo</label>
+        <label
+          >Detector de batidas
+          <select id="beat-method">
+            <option value="multifeature" selected>multifeature (mais robusto)</option>
+            <option value="degara">degara (mais rápido)</option>
+          </select></label
+        >
       </section>
 
       <section class="group">

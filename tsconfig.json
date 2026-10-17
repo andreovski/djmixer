@@ -3,5 +3,10 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["scripts", "vitest.config.ts", "packages/*/vitest.config.ts"]
+  "include": [
+    "scripts",
+    "vitest.config.ts",
+    "packages/*/vitest.config.ts",
+    "packages/analysis/src/essentia.d.ts"
+  ]
 }
