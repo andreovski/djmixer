@@ -5,6 +5,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   // Caminhos relativos para o build abrir dentro dos shells do spike 4 (app:// e tauri://).
   base: './',
+  worker: { format: 'es' },
   build: {
     rollupOptions: {
       input: {

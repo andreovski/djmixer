@@ -18,7 +18,9 @@ import {
   type ScheduledGroup,
   type Stretcher,
 } from '@djmixer/engine'
+import { ANALYSIS_SAMPLE_RATE } from '@djmixer/analysis/constants'
 import { beatsToSeconds, type Lane } from '@djmixer/shared'
+import type { AnalysisRequest, AnalysisResponse } from './analysis-worker.ts'
 import { drawLanes, LEGEND } from './lanes-view.ts'
 import { TRANSITIONS, transitionLanes, type TransitionName } from './transitions.ts'
 
@@ -79,6 +81,64 @@ for (const track of tracks) {
       track.buffer = null
       status.textContent = `não foi possível decodificar: ${String(error)}`
     }
+  })
+}
+
+/** Converte para mono a 44,1 kHz, que é o que o detector de batidas do Essentia aceita. */
+async function toAnalysisRate(buffer: AudioBuffer): Promise<Float32Array> {
+  const offline = new OfflineAudioContext(
+    1,
+    Math.ceil(buffer.duration * ANALYSIS_SAMPLE_RATE),
+    ANALYSIS_SAMPLE_RATE,
+  )
+  const source = offline.createBufferSource()
+  source.buffer = buffer
+  source.connect(offline.destination)
+  source.start()
+  return (await offline.startRendering()).getChannelData(0)
+}
+
+function runAnalysis(request: AnalysisRequest): Promise<AnalysisResponse> {
+  const worker = new Worker(new URL('./analysis-worker.ts', import.meta.url), { type: 'module' })
+  return new Promise((resolve) => {
+    worker.onmessage = (event: MessageEvent<AnalysisResponse>) => {
+      resolve(event.data)
+      worker.terminate()
+    }
+    worker.onerror = (event) => {
+      resolve({ ok: false, error: event.message })
+      worker.terminate()
+    }
+    worker.postMessage(request, [request.samples.buffer])
+  })
+}
+
+for (const track of tracks) {
+  const button = track.root.querySelector<HTMLButtonElement>('[data-field="analyze"]')
+  button?.addEventListener('click', async () => {
+    const status = track.root.querySelector('[data-field="status"]')
+    if (!status) return
+    button.disabled = true
+    status.textContent = 'analisando…'
+    const started = performance.now()
+    const beatMethod = $<HTMLSelectElement>('#beat-method').value as 'multifeature' | 'degara'
+    const response = await runAnalysis({
+      samples: await toAnalysisRate(sourceBuffer(track)),
+      options: { beatMethod },
+    })
+    button.disabled = false
+    if (!response.ok) {
+      status.textContent = `a análise falhou: ${response.error}`
+      return
+    }
+    const { result } = response
+    const bpmField = field(track, 'bpm')
+    const firstBeatField = field(track, 'firstBeat')
+    if (bpmField) bpmField.value = String(result.bpm)
+    if (firstBeatField) firstBeatField.value = result.firstBeatSeconds.toFixed(3)
+    track.stretched.clear()
+    const seconds = (performance.now() - started) / 1000
+    status.textContent = `${result.bpm} BPM, primeira batida em ${result.firstBeatSeconds.toFixed(3)} s, ${result.key}${result.scale === 'minor' ? 'm' : ''} (${result.camelot}). Analisado em ${seconds.toFixed(1)} s.`
   })
 }
 

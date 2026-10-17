@@ -17,7 +17,8 @@
     "fixtures:synthetic": "node scripts/gerar-faixas-sinteticas.ts",
     "fixtures:codecs": "node scripts/gerar-amostras-codecs.ts",
     "sondagem:electron": "pnpm fixtures:codecs && pnpm --filter @djmixer/playground build && pnpm --filter @djmixer/spike-shell-electron run baixar-electron && pnpm --filter @djmixer/spike-shell-electron run probe",
-    "sondagem:tauri": "pnpm fixtures:codecs && pnpm --filter @djmixer/playground build && pnpm --filter @djmixer/spike-shell-tauri run probe"
+    "sondagem:tauri": "pnpm fixtures:codecs && pnpm --filter @djmixer/playground build && pnpm --filter @djmixer/spike-shell-tauri run probe",
+    "avaliar:analise": "node scripts/avaliar-analise.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

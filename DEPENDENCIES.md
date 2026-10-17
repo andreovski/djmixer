@@ -6,12 +6,12 @@ Toda dependência nova entra nesta lista no mesmo PR, com a licença conferida. 
 
 Nenhuma ainda. Candidatas da fase 0, a conferir antes de entrar:
 
-| Pacote             | Licença declarada                  | Uso                    | Situação                                      |
-| ------------------ | ---------------------------------- | ---------------------- | --------------------------------------------- |
-| Rubber Band (WASM) | GPL-2.0-or-later                   | time-stretch           | spike 3; conferir a licença do pacote WASM    |
-| SoundTouch (WASM)  | LGPL-2.1                           | time-stretch           | spike 3; conferir a licença do pacote WASM    |
-| Essentia.js        | AGPL-3.0                           | BPM, key, beats        | spike 5; os modelos de ML são CC BY-NC-ND 4.0 |
-| FFmpeg             | LGPL ou GPL, conforme a compilação | decodificação e export | fase 1                                        |
+| Pacote             | Licença declarada                  | Uso                    | Situação                                                                                                                                                      |
+| ------------------ | ---------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rubber Band (WASM) | GPL-2.0-or-later                   | time-stretch           | spike 3; conferir a licença do pacote WASM                                                                                                                    |
+| SoundTouch (WASM)  | LGPL-2.1                           | time-stretch           | spike 3; conferir a licença do pacote WASM                                                                                                                    |
+| Essentia.js        | AGPL-3.0                           | BPM, key, beats        | `essentia.js` 0.1.3 em `packages/analysis` (LICENSE do pacote conferido: AGPL-3.0); só os algoritmos clássicos, os modelos de ML (CC BY-NC-ND 4.0) não entram |
+| FFmpeg             | LGPL ou GPL, conforme a compilação | decodificação e export | fase 1                                                                                                                                                        |
 
 ## Só de desenvolvimento
 
