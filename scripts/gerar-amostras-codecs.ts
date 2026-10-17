@@ -24,25 +24,33 @@ const FORMATS: [string, string[]][] = [
 ]
 
 mkdirSync(OUT_DIR, { recursive: true })
+// Um formato que o ffmpeg local não sabe codificar só fica de fora; a sondagem o marca como pulado.
+const missing: string[] = []
 for (const [name, codec] of FORMATS) {
   const file = join(OUT_DIR, name)
-  execFileSync(
-    'ffmpeg',
-    [
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-y',
-      '-f',
-      'lavfi',
-      '-i',
-      'aevalsrc=if(gte(t\\,0.5)\\,0.5*sin(2*PI*440*(t-0.5))\\,0):s=44100:d=5',
-      '-ac',
-      '2',
-      ...codec,
-      file,
-    ],
-    { stdio: 'inherit' },
-  )
-  console.log(`gerado ${file}`)
+  try {
+    execFileSync(
+      'ffmpeg',
+      [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-y',
+        '-f',
+        'lavfi',
+        '-i',
+        'aevalsrc=if(gte(t\\,0.5)\\,0.5*sin(2*PI*440*(t-0.5))\\,0):s=44100:d=5',
+        '-ac',
+        '2',
+        ...codec,
+        file,
+      ],
+      { stdio: 'inherit' },
+    )
+    console.log(`gerado ${file}`)
+  } catch {
+    missing.push(name)
+    console.warn(`não foi possível gerar ${name} com este ffmpeg`)
+  }
 }
+if (missing.length === FORMATS.length) process.exit(1)
