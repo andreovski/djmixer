@@ -1,6 +1,6 @@
 # 0008. Spike 4: shell desktop (Electron ou Tauri)
 
-Data: 17/10/2026. Situação: proposta, com o teste no MacBook do André pendente.
+Data: 17/10/2026. Situação: proposta, aguardando a escolha do André.
 
 ## Pergunta
 
@@ -47,7 +47,9 @@ Decodificação (✓ abre no lugar certo, ✗ não abre, ⚠ abre deslocado):
 
 No Linux o Tauri usa o GStreamer do sistema: com o pacote `gstreamer1.0-libav` instalado, AIFF, AAC e ALAC passam a abrir, mas o MP3 continua 25 ms atrasado (o atraso do codificador não é descartado). Uma faixa analisada assim teria o beatgrid inteiro deslocado em 25 ms. O Ogg não foi medido no macOS porque o ffmpeg do Homebrew no CI não codifica Vorbis.
 
-O teste do relógio em tempo real falhou no Electron nos runners de Linux e macOS (o relógio andou 0,02 s e 1,89 s em 2 s), e passou no Tauri e no Electron do Windows. Os runners de CI não têm placa de som, então esse resultado não diz como o Electron toca num Mac de verdade; ele precisa ser repetido no MacBook do André.
+O teste do relógio em tempo real falhou no Electron nos runners de Linux e macOS (o relógio andou 0,02 s e 1,89 s em 2 s), e passou no Tauri e no Electron do Windows. Os runners de CI não têm placa de som. A primeira versão do teste também contava como lentidão o tempo que o áudio leva para começar; a versão atual espera o áudio começar e mede por 5 s.
+
+No MacBook Pro do André (macOS arm64, Electron), com o teste atual: o relógio andou 5,003 s em 5,002 s, o áudio começou em 45 ms, a latência de saída é de 27 ms, o render de 120 s com duas faixas levou 0,77 s e o stretch R3, 1,9 s por minuto de áudio. A decodificação deu o mesmo resultado dos runners (AIFF e ALAC não abrem, os outros abrem no lugar certo).
 
 ## Conclusões
 
@@ -57,11 +59,10 @@ O teste do relógio em tempo real falhou no Electron nos runners de Linux e macO
 
 ## Proposta
 
-**Electron**, desde que o teste no MacBook do André confirme o relógio em tempo real. O que pesa: um único motor de navegador em todos os sistemas (o que se ouve no Mac é o que se ouve no Linux), todo o código em TypeScript e nenhum comportamento que dependa dos plugins instalados no sistema do usuário. O custo é o tamanho do instalador (uns 100 MB a mais que o Tauri), pouco para um app que trabalha com gigabytes de áudio.
+**Electron.** O teste no MacBook do André confirmou o relógio em tempo real. O que pesa: um único motor de navegador em todos os sistemas (o que se ouve no Mac é o que se ouve no Linux), todo o código em TypeScript e nenhum comportamento que dependa dos plugins instalados no sistema do usuário. O custo é o tamanho do instalador (uns 100 MB a mais que o Tauri), pouco para um app que trabalha com gigabytes de áudio.
 
 Se o André preferir o Tauri pelo tamanho, nada do motor muda; a diferença fica no processo principal, que passa a ser Rust.
 
 ## Pendente
 
-- Rodar `pnpm sondagem:electron` e `pnpm sondagem:tauri` no MacBook do André e conferir o relógio em tempo real e a latência de saída.
 - Decidir o shell. Os dois diretórios em `spikes/` saem do repositório quando `apps/desktop` nascer na fase 1.
