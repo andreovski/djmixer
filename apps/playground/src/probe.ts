@@ -81,10 +81,16 @@ async function realtimeClock(): Promise<ProbeResult> {
   const ctx = new AudioContext({ latencyHint: 'interactive' })
   try {
     const initialState = ctx.state
+    const created = performance.now()
     await timeout(ctx.resume(), 3000, 'resume()').catch(() => undefined)
+    // O dispositivo de saída leva um tempo para começar a pedir áudio, e nesse intervalo o
+    // relógio fica parado. Isso é latência de partida, não velocidade do relógio: medimos à parte.
+    while (ctx.currentTime === 0 && performance.now() - created < 3000) await sleep(5)
+    const startupMs = performance.now() - created
+    await sleep(500)
     const t0 = ctx.currentTime
     const p0 = performance.now()
-    await sleep(2000)
+    await sleep(5000)
     const advance = ctx.currentTime - t0
     const wall = (performance.now() - p0) / 1000
     const ratio = advance / wall
@@ -98,15 +104,16 @@ async function realtimeClock(): Promise<ProbeResult> {
           ? round(ctx.outputLatency * 1000, 1)
           : null,
       clockRatio: round(ratio, 4),
+      startupMs: round(startupMs, 0),
     }
-    const ok = ctx.state === 'running' && Math.abs(ratio - 1) < 0.02
+    const ok = ctx.state === 'running' && Math.abs(ratio - 1) < 0.01
     return {
       id: 'relogio',
       label: 'Relógio do AudioContext em tempo real',
       status: ok ? 'ok' : 'falha',
       detail: ok
-        ? `Rodando a ${ctx.sampleRate} Hz; o relógio andou ${advance.toFixed(3)} s em ${wall.toFixed(3)} s.`
-        : `Estado ${ctx.state}; o relógio andou ${advance.toFixed(3)} s em ${wall.toFixed(3)} s.`,
+        ? `Rodando a ${ctx.sampleRate} Hz; o relógio andou ${advance.toFixed(3)} s em ${wall.toFixed(3)} s; começou a andar em ${startupMs.toFixed(0)} ms.`
+        : `Estado ${ctx.state}; o relógio andou ${advance.toFixed(3)} s em ${wall.toFixed(3)} s; começou a andar em ${startupMs.toFixed(0)} ms.`,
       metrics,
     }
   } finally {
