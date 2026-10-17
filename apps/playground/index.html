@@ -8,7 +8,7 @@
   </head>
   <body>
     <main>
-      <h1>Spike 1: duas faixas sincronizadas</h1>
+      <h1>Spikes 1 e 2: sincronia e automação</h1>
       <p class="hint">
         Sem arquivos, o playground usa duas faixas sintéticas (124 e 128 BPM). Com as suas faixas,
         informe o BPM e o segundo da primeira batida de cada uma e ligue o metrônomo para conferir o
@@ -51,11 +51,33 @@
         <label><input id="metronome" type="checkbox" /> Metrônomo</label>
       </section>
 
+      <section class="group">
+        <label
+          >Transição
+          <select id="transition"></select
+        ></label>
+        <label
+          >EQ
+          <select id="eq">
+            <option value="isolator">Isolador (crossover)</option>
+            <option value="shelving">Shelving</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="lanes">
+        <p id="legend" class="hint"></p>
+        <p>Faixa A</p>
+        <canvas id="lanes-a" width="840" height="90"></canvas>
+        <p>Faixa B</p>
+        <canvas id="lanes-b" width="840" height="90"></canvas>
+      </section>
+
       <section class="actions">
         <button id="play">Tocar</button>
         <button id="stop">Parar</button>
         <button id="render">Renderizar e medir</button>
-        <a id="download" hidden download="spike1.wav">Baixar render (WAV)</a>
+        <a id="download" hidden download="transicao.wav">Baixar render (WAV)</a>
       </section>
 
       <pre id="log"></pre>
