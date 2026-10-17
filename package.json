@@ -1,0 +1,28 @@
+{
+  "name": "djmixer",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
+    "test": "vitest run",
+    "build": "pnpm -r build",
+    "dev:playground": "pnpm --filter @djmixer/playground dev",
+    "fixtures:synthetic": "node scripts/gerar-faixas-sinteticas.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.5"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# Áudio nunca entra no repositório (ver fixtures/README.md)
+fixtures/audio/
+fixtures/synthetic/

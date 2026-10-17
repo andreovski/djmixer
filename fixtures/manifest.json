@@ -1,0 +1,7 @@
+{
+  "tracks": [],
+  "synthetic": [
+    { "file": "synthetic/sintetica-124bpm.wav", "bpm": 124, "firstBeatSeconds": 0 },
+    { "file": "synthetic/sintetica-128bpm.wav", "bpm": 128, "firstBeatSeconds": 0 }
+  ]
+}
