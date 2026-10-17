@@ -1,0 +1,16 @@
+{
+  // Tudo que roda no Node (host, testes, e2e e configs); só para conferir tipos.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
+  "include": [
+    "host",
+    "e2e",
+    "playwright.config.ts",
+    "vitest.config.ts",
+    "vite.config.ts",
+    "../../packages/analysis/src/essentia.d.ts"
+  ]
+}

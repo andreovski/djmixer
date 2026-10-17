@@ -1,0 +1,35 @@
+{
+  "name": "@djmixer/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "pnpm run build && pnpm run baixar-electron && electron .",
+    "dev:web": "node host/dev-server.ts",
+    "build": "vite build && tsc -p tsconfig.electron.json",
+    "start": "electron .",
+    "baixar-electron": "node node_modules/electron/install.js",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && tsc -p tsconfig.electron.json --noEmit",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@djmixer/analysis": "workspace:*",
+    "@djmixer/engine": "workspace:*",
+    "@djmixer/shared": "workspace:*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "rubberband-wasm": "3.3.0",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "^22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "44.9.0",
+    "vite": "^8.3.4"
+  }
+}

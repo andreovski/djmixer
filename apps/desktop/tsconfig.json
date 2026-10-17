@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["vite/client"]
+  },
+  "include": ["src", "host/api.ts", "host/rpc.ts", "../../packages/analysis/src/essentia.d.ts"]
+}
