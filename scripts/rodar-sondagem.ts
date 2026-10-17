@@ -57,4 +57,14 @@ child.on('exit', (code) => {
   const markdown = lines.join('\n')
   console.log(markdown)
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown)
+  // Também como anotação, que a API do GitHub lê sem baixar os logs.
+  if (process.env.GITHUB_ACTIONS) {
+    const body = [
+      report.userAgent,
+      ...report.results.map((r) => `${r.status} | ${r.label} | ${r.detail}`),
+    ]
+    console.log(
+      `::notice title=Sondagem ${report.shell} (${process.platform}-${process.arch})::${body.join('%0A')}`,
+    )
+  }
 })
