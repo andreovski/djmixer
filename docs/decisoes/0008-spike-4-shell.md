@@ -1,6 +1,6 @@
 # 0008. Spike 4: shell desktop (Electron ou Tauri)
 
-Data: 17/10/2026. Situação: proposta, aguardando a escolha do André.
+Data: 17/10/2026. Situação: decidido, Electron (escolha do André em 17/10/2026).
 
 ## Pergunta
 
@@ -57,7 +57,7 @@ No MacBook Pro do André (macOS arm64, Electron), com o teste atual: o relógio 
 2. **A decodificação sai do WebView.** Nenhum shell abre todos os formatos, e o mesmo MP3 cai em lugares diferentes conforme o decodificador. Como já previa o escopo, o app decodifica com ffmpeg (fora do WebView) e entrega PCM ao motor, nos dois shells. Assim o beatgrid de um arquivo é o mesmo em qualquer sistema.
 3. **O que sobra para decidir** é o resto do app: o Electron leva o mesmo Chromium para todos os sistemas e roda o processo principal em TypeScript (ffmpeg, SQLite e arquivos ficam na mesma linguagem do motor); o Tauri gera um app bem menor e usa três motores de navegador diferentes, com o backend em Rust.
 
-## Proposta
+## Decisão
 
 **Electron.** O teste no MacBook do André confirmou o relógio em tempo real. O que pesa: um único motor de navegador em todos os sistemas (o que se ouve no Mac é o que se ouve no Linux), todo o código em TypeScript e nenhum comportamento que dependa dos plugins instalados no sistema do usuário. O custo é o tamanho do instalador (uns 100 MB a mais que o Tauri), pouco para um app que trabalha com gigabytes de áudio.
 
@@ -65,4 +65,4 @@ Se o André preferir o Tauri pelo tamanho, nada do motor muda; a diferença fica
 
 ## Pendente
 
-- Decidir o shell. Os dois diretórios em `spikes/` saem do repositório quando `apps/desktop` nascer na fase 1.
+- Os dois diretórios em `spikes/` saem do repositório quando `apps/desktop` nascer na fase 1.
