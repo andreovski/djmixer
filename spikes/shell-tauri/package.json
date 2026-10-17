@@ -1,0 +1,15 @@
+{
+  "name": "@djmixer/spike-shell-tauri",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "probe": "tauri dev --no-watch --no-dev-server-wait",
+    "compile": "tauri build --debug --no-bundle",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.3"
+  }
+}

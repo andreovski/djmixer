@@ -14,7 +14,8 @@
     "test": "vitest run",
     "build": "pnpm -r build",
     "dev:playground": "pnpm --filter @djmixer/playground dev",
-    "fixtures:synthetic": "node scripts/gerar-faixas-sinteticas.ts"
+    "fixtures:synthetic": "node scripts/gerar-faixas-sinteticas.ts",
+    "fixtures:codecs": "node scripts/gerar-amostras-codecs.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -3,7 +3,9 @@ import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'coverage/**'] },
+  {
+    ignores: ['**/dist/**', '**/node_modules/**', 'coverage/**', 'spikes/shell-tauri/src-tauri/**'],
+  },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {
@@ -15,5 +17,17 @@ export default tseslint.config(
         { patterns: ['react', 'react-dom', 'electron', '@tauri-apps/*', '@djmixer/playground'] },
       ],
     },
+  },
+  {
+    // O shell Electron do spike 4 roda direto no Node do Electron, sem build.
+    files: ['spikes/shell-electron/**/*.{js,cjs}'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', URL: 'readonly', Response: 'readonly' },
+    },
+  },
+  {
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: { require: 'readonly' } },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
 )
