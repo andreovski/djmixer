@@ -44,9 +44,17 @@ test('importa, monta, ensaia, salva e exporta um set', async () => {
   await page.getByRole('button', { name: 'Importar…' }).click()
   const items = page.getByTestId('library-item')
   await expect(items).toHaveCount(2)
+  // A análise termina com o BPM na lista ou com "erro" (o motivo fica no title).
+  await expect(
+    page.locator('.library-item .bpm:not(:has-text("—")), .library-item .warn'),
+  ).toHaveCount(2, { timeout: 120_000 })
+  const failures = await page
+    .locator('.library-item .warn')
+    .evaluateAll((els) => els.map((el) => `${el.textContent}: ${el.getAttribute('title') ?? ''}`))
+  expect(failures, 'erros da análise').toEqual([])
   const bpms = page.getByTestId('bpm')
-  await expect(bpms.nth(0)).toHaveText(/^124\.0/, { timeout: 120_000 })
-  await expect(bpms.nth(1)).toHaveText(/^127\.0/, { timeout: 120_000 })
+  await expect(bpms.nth(0)).toHaveText(/^124\.0/)
+  await expect(bpms.nth(1)).toHaveText(/^127\.0/)
   await expect(page.locator('.library-item .key')).toHaveText(['8A', '8B'])
 
   await items.nth(0).dblclick()

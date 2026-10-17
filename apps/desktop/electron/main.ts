@@ -31,6 +31,9 @@ const CSP = [
   "worker-src 'self' blob:",
   "connect-src 'self' data:",
 ].join('; ')
+// O worker de análise roda o Essentia.js, cujo código gerado pelo Emscripten (embind) monta
+// funções a partir de texto. Só ele ganha 'unsafe-eval'; a página continua sem.
+const WORKER_CSP = CSP.replace("'wasm-unsafe-eval'", "'wasm-unsafe-eval' 'unsafe-eval'")
 
 /** Métodos do host que a interface pode chamar (ver host/api.ts). */
 const METHODS = [
@@ -140,7 +143,7 @@ app.whenReady().then(() => {
       return new Response(response.body, {
         headers: {
           'content-type': TYPES[extname(file)] ?? 'application/octet-stream',
-          'content-security-policy': CSP,
+          'content-security-policy': /analysis\.worker-[\w-]+\.js$/.test(file) ? WORKER_CSP : CSP,
         },
       })
     } catch (error) {
