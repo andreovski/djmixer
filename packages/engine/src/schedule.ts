@@ -24,10 +24,11 @@ export interface ScheduledClip {
 
 /**
  * Converte um clip em beats para o agendamento no relógio do AudioContext.
- * `fromBeat` permite tocar o grupo a partir do meio; clips que já terminaram devolvem null.
+ * `fromBeat` e `untilBeat` recortam o trecho do grupo que vai tocar (tocar do meio, ensaiar só a
+ * transição); clips fora desse trecho devolvem null.
  *
- * Na fase 0 o casamento de BPM usa `playbackRate` (muda o tom). O spike 3 troca isso por
- * time-stretch com key lock aplicado offline, mantendo o mesmo agendamento.
+ * O casamento de BPM usa `playbackRate`, que vale 1 quando a faixa já chega esticada para o BPM
+ * do grupo (key lock) e muda o tom quando não (varispeed).
  */
 export function scheduleClip(
   clip: ClipPlacement,
@@ -35,12 +36,13 @@ export function scheduleClip(
   groupBpm: number,
   contextStart: number,
   fromBeat: Beat = 0,
+  untilBeat: Beat = Infinity,
 ): ScheduledClip | null {
   if (clip.outBeat <= clip.inBeat) {
     throw new RangeError(`Clip vazio: inBeat ${clip.inBeat}, outBeat ${clip.outBeat}`)
   }
-  const endBeat = clip.startBeat + (clip.outBeat - clip.inBeat)
-  if (endBeat <= fromBeat) return null
+  const endBeat = Math.min(untilBeat, clip.startBeat + (clip.outBeat - clip.inBeat))
+  if (endBeat <= fromBeat || clip.startBeat >= endBeat) return null
 
   const skipped = Math.max(0, fromBeat - clip.startBeat)
   const playbackRate = stretchRatio(grid.bpm, groupBpm)
