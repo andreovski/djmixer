@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Acesso ao host: no Electron vem do preload (window.djmixer); num navegador comum, fala com o
-// servidor de desenvolvimento (host/dev-server.ts) por HTTP.
+// Acesso ao host: no Electron vem do preload (window.djmixer); na versão web (build com
+// VITE_DJMIXER_HOST=browser) roda inteiro no navegador; senão, fala com o servidor de
+// desenvolvimento (host/dev-server.ts) por HTTP.
 import type { HostApi } from '../host/api.ts'
 import { decodeRpc, encodeRpc } from '../host/rpc.ts'
+import { createBrowserHost } from './browser-host.ts'
 
 declare global {
   interface Window {
@@ -65,4 +67,6 @@ function createWebHost(): HostApi {
   })
 }
 
-export const host: HostApi = window.djmixer ?? createWebHost()
+export const host: HostApi =
+  window.djmixer ??
+  (import.meta.env.VITE_DJMIXER_HOST === 'browser' ? createBrowserHost() : createWebHost())

@@ -60,7 +60,8 @@ export interface ExportResult {
 }
 
 export interface HostApi {
-  readonly kind: 'electron' | 'web'
+  /** `web` é o servidor de desenvolvimento; `browser` é a versão web, sem servidor. */
+  readonly kind: 'electron' | 'web' | 'browser'
   /** Abre o seletor de arquivos de áudio; devolve caminhos absolutos. */
   pickAudioFiles(): Promise<string[]>
   /** Calcula o hash, lê título e artista e registra na biblioteca. Não analisa. */
@@ -83,6 +84,8 @@ export interface HostApi {
    * ou de um buffer esticado guardado no cache.
    */
   mediaUrl(kind: 'decoded' | 'stretched', key: string): string
+  /** Lê o mesmo conteúdo de `mediaUrl` sem passar por URL (versão web); null se não existe. */
+  readMedia?(kind: 'decoded' | 'stretched', key: string): Promise<ArrayBuffer | null>
   saveStretched(key: string, data: Uint8Array): Promise<void>
   openProject(): Promise<{ path: string; json: string } | null>
   /** Salva no caminho dado ou, sem caminho, pergunta onde. Devolve o caminho usado. */

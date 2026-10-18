@@ -64,6 +64,10 @@ const decoded = new Lru<AudioBuffer>(8)
 const stretched = new Lru<AudioBuffer>(8)
 
 async function fetchPcm(kind: 'decoded' | 'stretched', key: string): Promise<Float32Array | null> {
+  if (host.readMedia) {
+    const data = await host.readMedia(kind, key)
+    return data ? new Float32Array(data) : null
+  }
   const response = await fetch(host.mediaUrl(kind, key))
   if (response.status === 404) return null
   if (!response.ok) throw new Error((await response.text()) || `erro ${response.status}`)

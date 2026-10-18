@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { loadLibrary, locateTrack, saveProject } from '../actions.ts'
 import { stop } from '../audio.ts'
+import { host } from '../host.ts'
 import { currentGroup, useApp } from '../store.ts'
 import { BeatgridEditor } from './BeatgridEditor.tsx'
 import { GroupSettings } from './GroupSettings.tsx'
@@ -51,7 +52,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (useApp.getState().dirty && window.djmixer) event.preventDefault()
+      if (useApp.getState().dirty && host.kind !== 'web') event.preventDefault()
     }
     window.addEventListener('beforeunload', beforeUnload)
     return () => {
@@ -119,7 +120,12 @@ function StatusBar() {
   const set = useApp((s) => s.set)
   return (
     <footer className={`statusbar ${notice?.kind ?? ''}`} data-testid="notice">
-      <span>{notice?.text ?? 'Pronto.'}</span>
+      <span>
+        {notice?.text ??
+          (host.kind === 'browser'
+            ? 'Versão web: as faixas importadas ficam guardadas só neste navegador, e o áudio não sai do seu computador.'
+            : 'Pronto.')}
+      </span>
       {notice && <button onClick={() => set({ notice: null })}>✕</button>}
     </footer>
   )
