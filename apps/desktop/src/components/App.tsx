@@ -4,6 +4,7 @@ import { loadLibrary, locateTrack, saveProject } from '../actions.ts'
 import { stop } from '../audio.ts'
 import { host } from '../host.ts'
 import { currentGroup, useApp } from '../store.ts'
+import { TOUCH_QUERY, useMedia } from '../responsive.ts'
 import { BeatgridEditor } from './BeatgridEditor.tsx'
 import { GroupSettings } from './GroupSettings.tsx'
 import { LibraryPanel } from './LibraryPanel.tsx'
@@ -15,6 +16,8 @@ import { TransitionPanel } from './TransitionPanel.tsx'
 export function App() {
   const group = useApp(currentGroup)
   const gridEditor = useApp((s) => s.gridEditor)
+  const pane = useApp((s) => s.pane)
+  const touch = useMedia(TOUCH_QUERY)
 
   useEffect(() => {
     void loadLibrary()
@@ -62,7 +65,7 @@ export function App() {
   }, [])
 
   return (
-    <div className="app">
+    <div className={`app pane-${pane}`}>
       <TopBar />
       <MissingTracks />
       <div className="layout">
@@ -81,7 +84,9 @@ export function App() {
             <div className="empty-state">
               <h2>Monte o set em grupos de transições</h2>
               <p>
-                Importe faixas na biblioteca e dê dois cliques nelas para criar o primeiro grupo.
+                {touch
+                  ? 'Importe faixas na biblioteca, toque numa delas e use “Adicionar ao grupo” para criar o primeiro grupo.'
+                  : 'Importe faixas na biblioteca e dê dois cliques nelas para criar o primeiro grupo.'}{' '}
                 Cada faixa nova entra 8 compassos antes do fim da anterior, com uma transição Blend
                 pronta para editar.
               </p>
@@ -90,6 +95,7 @@ export function App() {
         </main>
       </div>
       <StatusBar />
+      <PaneTabs />
       <ExportOverlay />
       {gridEditor && <BeatgridEditor key={gridEditor} hash={gridEditor} />}
     </div>
@@ -115,11 +121,29 @@ function MissingTracks() {
   )
 }
 
+/** Abas de baixo, só em tela compacta (o CSS esconde no desktop): biblioteca ou set. */
+function PaneTabs() {
+  const pane = useApp((s) => s.pane)
+  const set = useApp((s) => s.set)
+  const tracks = useApp((s) => Object.keys(s.library).length)
+  const groups = useApp((s) => s.project.groups.length)
+  return (
+    <nav className="pane-tabs" aria-label="Painel">
+      <button className={pane === 'library' ? 'on' : ''} onClick={() => set({ pane: 'library' })}>
+        Biblioteca <span className="muted">{tracks}</span>
+      </button>
+      <button className={pane === 'set' ? 'on' : ''} onClick={() => set({ pane: 'set' })}>
+        Set <span className="muted">{groups}</span>
+      </button>
+    </nav>
+  )
+}
+
 function StatusBar() {
   const notice = useApp((s) => s.notice)
   const set = useApp((s) => s.set)
   return (
-    <footer className={`statusbar ${notice?.kind ?? ''}`} data-testid="notice">
+    <footer className={`statusbar ${notice?.kind ?? 'idle'}`} data-testid="notice">
       <span>
         {notice?.text ??
           (host.kind === 'browser'

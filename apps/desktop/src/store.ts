@@ -16,6 +16,8 @@ export type AnalysisStatus = 'pending' | 'analyzing' | 'done' | 'error'
 export type Snap = 'bar' | 'beat' | 'off'
 export type Tool = 'clips' | 'automation'
 export type PlaybackKind = 'group' | 'loop' | 'set'
+/** Aba visível em tela compacta (celular, tablet em retrato). */
+export type Pane = 'library' | 'set'
 
 export interface Notice {
   kind: 'info' | 'error'
@@ -53,6 +55,7 @@ export interface AppState {
   cursorBeat: number
   /** Faixa aberta no editor de beatgrid (hash). */
   gridEditor: string | null
+  pane: Pane
 
   playing: PlaybackKind | null
   loading: boolean
@@ -90,6 +93,7 @@ export const useApp = create<AppState>((set, get) => ({
   snap: 'bar',
   cursorBeat: 0,
   gridEditor: null,
+  pane: 'library',
 
   playing: null,
   loading: false,

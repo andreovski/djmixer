@@ -48,6 +48,8 @@ pnpm e2e                 # teste de ponta a ponta no Electron (precisa de pnpm -
 
 A versão web roda inteira no navegador, publicada em https://andreovski.github.io/djmixer/ a cada merge na `main`. O áudio não sai do computador: as faixas importadas ficam guardadas no navegador (IndexedDB), a decodificação usa o decodificador do navegador no lugar do ffmpeg (MP3, WAV, FLAC e AAC; AIFF e ALAC podem falhar), salvar o projeto e exportar o WAV viram downloads e abrir um projeto é escolher o arquivo. A biblioteca é de cada navegador. Funciona melhor no Chrome ou no Edge.
 
+A interface se adapta a tablet e celular, em retrato e deitado: em tela pequena a biblioteca e o set viram abas, e a linha do tempo aceita gestos (arrastar o fundo ou dois dedos rolam, pinça aproxima, toque duplo apaga um ponto de automação e segurar troca a curva). Detalhes em [docs/decisoes/0012](docs/decisoes/0012-versao-responsiva.md).
+
 ### Usando o app
 
 1. **Importar…** na biblioteca e escolha arquivos de áudio. A análise (BPM, tom em Camelot, waveform) roda em segundo plano.

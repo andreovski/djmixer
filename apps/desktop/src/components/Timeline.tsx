@@ -23,19 +23,26 @@ import {
   trimClip,
   updateChannel,
 } from '../editing.ts'
+import { TOUCH_QUERY, useMedia } from '../responsive.ts'
 import { useApp, updateGroup } from '../store.ts'
 import { drawWaveform } from '../waveform.ts'
 import { ChannelHeader } from './ChannelHeader.tsx'
 import { ROW_H, RULER_H } from './layout.ts'
 
 const EDGE_PX = 7
+const EDGE_PX_TOUCH = 18
 const POINT_R = 5
+/** Quanto o dedo anda antes de virar arraste (abaixo disso é toque). */
+const TOUCH_SLOP_PX = 8
+const DOUBLE_TAP_MS = 350
+const LONG_PRESS_MS = 550
 const COLORS = ['#3d7bd9', '#d9873d', '#3dbf86', '#b55dd9', '#d94d6a', '#c2b43a']
 
 interface Drag {
   kind: 'move' | 'trim-start' | 'trim-end' | 'point' | 'pan'
   channelId: string
   originX: number
+  originY: number
   originBeat: number
   originStart: number
   laneKind?: EditableLaneKind
@@ -43,6 +50,20 @@ interface Drag {
   points?: Point[]
   key: string
   originScroll?: number
+  originScrollTop?: number
+  originClientY?: number
+  touch?: boolean
+  /** Passou do limiar de arraste. */
+  moved?: boolean
+  /** Já gravou alguma edição com a chave `key`. */
+  edited?: boolean
+}
+
+interface Pinch {
+  distance: number
+  zoom: number
+  anchorBeat: number
+  midY: number
 }
 
 export function Timeline({ group }: { group: Group }) {
@@ -65,6 +86,12 @@ export function Timeline({ group }: { group: Group }) {
   const [pxPerBeat, setPxPerBeat] = useState(5)
   const [scrollBeat, setScrollBeat] = useState(-4)
   const drag = useRef<Drag | null>(null)
+  const touches = useRef(new Map<number, { x: number; y: number }>())
+  const pinch = useRef<Pinch | null>(null)
+  const longPress = useRef<number | null>(null)
+  const lastTap = useRef<{ key: string; time: number } | null>(null)
+  const lastPointer = useRef('mouse')
+  const touch = useMedia(TOUCH_QUERY)
   const height = RULER_H + Math.max(1, group.channels.length) * ROW_H
 
   const tracks = new Map(project.tracks.map((track) => [track.id, track]))
@@ -218,7 +245,9 @@ export function Timeline({ group }: { group: Group }) {
       ctx.fillStyle = '#8b93a5'
       ctx.font = '13px system-ui, sans-serif'
       ctx.fillText(
-        'Grupo vazio: dê dois cliques numa faixa da biblioteca para adicioná-la aqui.',
+        touch
+          ? 'Grupo vazio: toque numa faixa da biblioteca e use “Adicionar ao grupo”.'
+          : 'Grupo vazio: dê dois cliques numa faixa da biblioteca para adicioná-la aqui.',
         16,
         RULER_H + 50,
       )
@@ -244,6 +273,7 @@ export function Timeline({ group }: { group: Group }) {
     transitionId,
     laneByChannel,
     cursorBeat,
+    touch,
   ])
 
   // Cabeça de reprodução em outra camada, redesenhada a cada quadro.
@@ -278,24 +308,120 @@ export function Timeline({ group }: { group: Group }) {
 
   const rowAt = (y: number) => Math.floor((y - RULER_H) / ROW_H)
 
+  /** Contêiner que rola a linha do tempo na vertical (muda entre desktop e tela compacta). */
+  const scroller = () => {
+    let node = wrapRef.current?.parentElement ?? null
+    while (node) {
+      const overflow = getComputedStyle(node).overflowY
+      if ((overflow === 'auto' || overflow === 'scroll') && node.scrollHeight > node.clientHeight)
+        return node
+      node = node.parentElement
+    }
+    return null
+  }
+
+  const localPoint = (event: { clientX: number; clientY: number }) => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) }
+  }
+
+  const deletePoint = (
+    channel: Channel,
+    kind: EditableLaneKind,
+    points: Point[],
+    index: number,
+  ) => {
+    const next = points.filter((_, i) => i !== index)
+    edit((p) =>
+      updateGroup(p, group.id, (g) =>
+        updateChannel(g, channel.id, (c) => setLanePoints(c, kind, next)),
+      ),
+    )
+  }
+
+  const cyclePointCurve = (
+    channel: Channel,
+    kind: EditableLaneKind,
+    points: Point[],
+    index: number,
+  ) => {
+    const next = points.map((point, i) =>
+      i === index ? { ...point, curve: nextCurve(point.curve) } : point,
+    )
+    edit((p) =>
+      updateGroup(p, group.id, (g) =>
+        updateChannel(g, channel.id, (c) => setLanePoints(c, kind, next)),
+      ),
+    )
+  }
+
+  const cancelLongPress = () => {
+    if (longPress.current !== null) window.clearTimeout(longPress.current)
+    longPress.current = null
+  }
+
+  /** Dois dedos: aproxima/afasta em torno do meio dos dedos e rola junto com eles. */
+  const startPinch = () => {
+    const [a, b] = [...touches.current.values()]
+    if (!a || !b) return
+    cancelLongPress()
+    // O primeiro dedo pode ter criado ou arrastado algo antes do segundo encostar: desfaz.
+    if (drag.current?.edited && useApp.getState().lastCoalesce === drag.current.key)
+      useApp.getState().undo()
+    drag.current = null
+    const midX = (a.x + b.x) / 2
+    pinch.current = {
+      distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      zoom: pxPerBeat,
+      anchorBeat: beatOf(midX),
+      midY: (a.y + b.y) / 2,
+    }
+  }
+
+  const movePinch = () => {
+    const current = pinch.current
+    const [a, b] = [...touches.current.values()]
+    if (!current || !a || !b) return
+    const midX = (a.x + b.x) / 2
+    const midY = (a.y + b.y) / 2
+    const distance = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))
+    const zoom = Math.min(80, Math.max(0.5, current.zoom * (distance / current.distance)))
+    setPxPerBeat(zoom)
+    setScrollBeat(current.anchorBeat - midX / zoom)
+    const box = scroller()
+    if (box) box.scrollTop -= midY - current.midY
+    current.midY = midY
+  }
+
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (event.button === 2) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    const isTouch = event.pointerType === 'touch'
+    lastPointer.current = event.pointerType
+    const { x, y } = localPoint(event)
+    if (isTouch) {
+      touches.current.set(event.pointerId, { x, y: event.clientY })
+      event.currentTarget.setPointerCapture(event.pointerId)
+      if (touches.current.size >= 2) {
+        startPinch()
+        return
+      }
+    }
     const beat = beatOf(x)
     const key = `${Date.now()}`
-    if (event.altKey || event.button === 1) {
+    const base = { originX: x, originY: y, originBeat: beat, originStart: 0, key }
+    const startPan = () => {
       drag.current = {
+        ...base,
         kind: 'pan',
         channelId: '',
-        originX: x,
-        originBeat: beat,
-        originStart: 0,
-        key,
         originScroll: scrollBeat,
+        originClientY: event.clientY,
+        ...(isTouch ? { originScrollTop: scroller()?.scrollTop ?? 0 } : {}),
       }
       event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    if (event.altKey || event.button === 1) {
+      startPan()
       return
     }
     if (y < RULER_H) {
@@ -307,10 +433,16 @@ export function Timeline({ group }: { group: Group }) {
       return
     }
     const channel = group.channels[rowAt(y)]
-    if (!channel) return
+    if (!channel) {
+      if (isTouch) startPan()
+      return
+    }
     set({ channelId: channel.id })
     const top = RULER_H + rowAt(y) * ROW_H
     event.currentTarget.setPointerCapture(event.pointerId)
+    // Com o dedo os alvos são maiores e o arraste só começa depois de alguns pixels.
+    const reach = isTouch ? POINT_R + 12 : POINT_R + 3
+    const edgePx = isTouch ? EDGE_PX_TOUCH : EDGE_PX
 
     if (tool === 'automation') {
       const kind = laneOf(channel)
@@ -318,13 +450,35 @@ export function Timeline({ group }: { group: Group }) {
       const valueAt = (py: number) => Math.min(1, Math.max(0, 1 - (py - top - 6) / (ROW_H - 12)))
       const yOf = (value: number) => top + 6 + (1 - value) * (ROW_H - 12)
       let index = points.findIndex(
-        (point) => Math.hypot(xOf(point.beat) - x, yOf(point.value) - y) <= POINT_R + 3,
+        (point) => Math.hypot(xOf(point.beat) - x, yOf(point.value) - y) <= reach,
       )
       let next = points
+      let edited = false
+      if (index >= 0 && isTouch) {
+        // Toque duplo no mesmo ponto apaga; segurar parado troca a curva.
+        const tapKey = `${channel.id}:${kind}:${index}`
+        const now = Date.now()
+        if (lastTap.current?.key === tapKey && now - lastTap.current.time < DOUBLE_TAP_MS) {
+          lastTap.current = null
+          deletePoint(channel, kind, points, index)
+          return
+        }
+        lastTap.current = { key: tapKey, time: now }
+        const hitIndex = index
+        longPress.current = window.setTimeout(() => {
+          longPress.current = null
+          if (!drag.current || drag.current.moved) return
+          drag.current = null
+          lastTap.current = null
+          cyclePointCurve(channel, kind, points, hitIndex)
+          navigator.vibrate?.(10)
+        }, LONG_PRESS_MS)
+      }
       if (index < 0) {
         const point: Point = { beat: snapBeat(beat, snap), value: valueAt(y), curve: 'linear' }
         next = [...points, point].sort((a, b) => a.beat - b.beat)
         index = next.indexOf(point)
+        edited = true
         edit(
           (p) =>
             updateGroup(p, group.id, (g) =>
@@ -334,15 +488,14 @@ export function Timeline({ group }: { group: Group }) {
         )
       }
       drag.current = {
+        ...base,
         kind: 'point',
         channelId: channel.id,
-        originX: x,
-        originBeat: beat,
-        originStart: 0,
         laneKind: kind,
         pointIndex: index,
         points: next,
-        key,
+        edited,
+        touch: isTouch,
       }
       return
     }
@@ -350,24 +503,33 @@ export function Timeline({ group }: { group: Group }) {
     const x0 = xOf(channel.clip.startBeat)
     const x1 = xOf(channelEndBeat(channel))
     const kind: Drag['kind'] =
-      Math.abs(x - x0) <= EDGE_PX ? 'trim-start' : Math.abs(x - x1) <= EDGE_PX ? 'trim-end' : 'move'
-    if (kind === 'move' && (x < x0 || x > x1)) return
+      Math.abs(x - x0) <= edgePx ? 'trim-start' : Math.abs(x - x1) <= edgePx ? 'trim-end' : 'move'
+    if (kind === 'move' && (x < x0 || x > x1)) {
+      // Com o dedo, arrastar o fundo rola a linha do tempo (no mouse é Alt+arrastar).
+      if (isTouch) startPan()
+      return
+    }
     drag.current = {
+      ...base,
       kind,
       channelId: channel.id,
-      originX: x,
-      originBeat: beat,
       originStart: channel.clip.startBeat,
-      key,
+      touch: isTouch,
     }
   }
 
   const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    const { x, y } = localPoint(event)
+    if (event.pointerType === 'touch' && touches.current.has(event.pointerId)) {
+      touches.current.set(event.pointerId, { x, y: event.clientY })
+      if (pinch.current) {
+        movePinch()
+        return
+      }
+    }
     const current = drag.current
     if (!current) {
+      if (event.pointerType !== 'mouse') return
       // Cursor de acordo com o que está embaixo do mouse.
       const channel = group.channels[rowAt(y)]
       let cursor = 'default'
@@ -380,10 +542,21 @@ export function Timeline({ group }: { group: Group }) {
       event.currentTarget.style.cursor = cursor
       return
     }
+    if (!current.moved) {
+      const slop = current.touch ? TOUCH_SLOP_PX : 0
+      if (Math.hypot(x - current.originX, y - current.originY) <= slop) return
+      current.moved = true
+      cancelLongPress()
+      lastTap.current = null
+    }
     if (current.kind === 'pan') {
       setScrollBeat((current.originScroll ?? 0) - (x - current.originX) / pxPerBeat)
+      const box = current.originScrollTop !== undefined ? scroller() : null
+      if (box && current.originScrollTop !== undefined)
+        box.scrollTop = current.originScrollTop - (event.clientY - (current.originClientY ?? 0))
       return
     }
+    current.edited = true
     const beat = beatOf(x)
     const channel = group.channels.find((candidate) => candidate.id === current.channelId)
     if (!channel) return
@@ -427,7 +600,13 @@ export function Timeline({ group }: { group: Group }) {
     }
   }
 
-  const onPointerUp = () => {
+  const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    cancelLongPress()
+    if (touches.current.delete(event.pointerId) && pinch.current) {
+      // Tirar um dos dois dedos encerra o gesto; o que sobrou não começa outro arraste.
+      if (touches.current.size < 2) pinch.current = null
+      return
+    }
     drag.current = null
   }
 
@@ -454,29 +633,22 @@ export function Timeline({ group }: { group: Group }) {
     return index < 0 ? null : { channel, kind, points, index }
   }
 
+  // No toque esses dois gestos já foram tratados no pointerdown (toque duplo e segurar).
   const onDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (lastPointer.current === 'touch') return
     const hit = pointAt(event)
-    if (!hit) return
-    const next = hit.points.filter((_, i) => i !== hit.index)
-    edit((p) =>
-      updateGroup(p, group.id, (g) =>
-        updateChannel(g, hit.channel.id, (c) => setLanePoints(c, hit.kind, next)),
-      ),
-    )
+    if (hit) deletePoint(hit.channel, hit.kind, hit.points, hit.index)
   }
 
   const onContextMenu = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (lastPointer.current === 'touch') {
+      event.preventDefault()
+      return
+    }
     const hit = pointAt(event)
     if (!hit) return
     event.preventDefault()
-    const next = hit.points.map((point, i) =>
-      i === hit.index ? { ...point, curve: nextCurve(point.curve) } : point,
-    )
-    edit((p) =>
-      updateGroup(p, group.id, (g) =>
-        updateChannel(g, hit.channel.id, (c) => setLanePoints(c, hit.kind, next)),
-      ),
-    )
+    cyclePointCurve(hit.channel, hit.kind, hit.points, hit.index)
   }
 
   const onWheel = (event: WheelEvent<HTMLCanvasElement>) => {
@@ -544,9 +716,13 @@ export function Timeline({ group }: { group: Group }) {
           Ajustar
         </button>
         <span className="hint">
-          {tool === 'automation'
-            ? 'Clique cria ponto · arraste move · dois cliques apaga · botão direito troca a curva'
-            : 'Arraste o clip para mover · bordas aparam · clique na régua posiciona o cursor · Alt+arrastar rola'}
+          {touch
+            ? tool === 'automation'
+              ? 'Toque cria ponto · arraste move · toque duplo apaga · segure para trocar a curva · dois dedos rolam e aproximam'
+              : 'Arraste o clip para mover · bordas aparam · toque na régua posiciona o cursor · arraste o fundo ou use dois dedos para rolar e aproximar'
+            : tool === 'automation'
+              ? 'Clique cria ponto · arraste move · dois cliques apaga · botão direito troca a curva'
+              : 'Arraste o clip para mover · bordas aparam · clique na régua posiciona o cursor · Alt+arrastar rola'}
         </span>
       </div>
       <div className="timeline-body">
