@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from 
 import { saveGridEdit } from '../actions.ts'
 import { errorText, previewSeconds, startPreview, stopPreview } from '../audio.ts'
 import { entryGrid } from '../editing.ts'
+import { TOUCH_QUERY, useMedia } from '../responsive.ts'
 import { useApp } from '../store.ts'
 import { drawWaveform } from '../waveform.ts'
 
@@ -33,6 +34,10 @@ export function BeatgridEditor({ hash }: { hash: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overviewRef = useRef<HTMLCanvasElement>(null)
   const drag = useRef<{ x: number; first: number; moved: boolean } | null>(null)
+  // Dois dedos: aproxima/afasta e rola a waveform (o equivalente ao Ctrl/⌘+roda).
+  const touches = useRef(new Map<number, number>())
+  const pinch = useRef<{ distance: number; spp: number; anchor: number } | null>(null)
+  const touch = useMedia(TOUCH_QUERY)
   const duration = entry?.durationSeconds ?? 0
   const beatSeconds = 60 / grid.bpm
 
@@ -160,15 +165,53 @@ export function BeatgridEditor({ hash }: { hash: string }) {
     if (bpm >= 40 && bpm <= 250) setGrid((g) => ({ ...g, bpm: Math.round(bpm * 1000) / 1000 }))
   }
 
+  const pinchSpan = () => {
+    const [a, b] = [...touches.current.values()]
+    return a === undefined || b === undefined
+      ? null
+      : { distance: Math.max(1, Math.abs(a - b)), mid: (a + b) / 2 }
+  }
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
+    if (event.pointerType === 'touch') {
+      const left = event.currentTarget.getBoundingClientRect().left
+      touches.current.set(event.pointerId, event.clientX - left)
+      const span = touches.current.size >= 2 ? pinchSpan() : null
+      if (span) {
+        // O primeiro dedo pode já ter arrastado a grade: volta para onde estava.
+        const first = drag.current?.first
+        if (drag.current?.moved && first !== undefined)
+          setGrid((g) => ({ ...g, firstBeatSeconds: first }))
+        drag.current = null
+        pinch.current = {
+          distance: span.distance,
+          spp: secondsPerPixel,
+          anchor: start + span.mid * secondsPerPixel,
+        }
+        return
+      }
+    }
     drag.current = { x: event.clientX, first: grid.firstBeatSeconds, moved: false }
   }
   const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (touches.current.has(event.pointerId)) {
+      const left = event.currentTarget.getBoundingClientRect().left
+      touches.current.set(event.pointerId, event.clientX - left)
+      const span = pinchSpan()
+      if (pinch.current && span) {
+        const spp = Math.min(
+          0.2,
+          Math.max(0.0002, pinch.current.spp * (pinch.current.distance / span.distance)),
+        )
+        setSpp(spp)
+        setStart(pinch.current.anchor - span.mid * spp)
+        return
+      }
+    }
     const current = drag.current
     if (!current) return
     const dx = event.clientX - current.x
-    if (Math.abs(dx) > 3) current.moved = true
+    if (Math.abs(dx) > (event.pointerType === 'touch' ? 8 : 3)) current.moved = true
     if (current.moved) {
       let first = current.first + dx * secondsPerPixel
       while (first < 0) first += beatSeconds
@@ -176,6 +219,10 @@ export function BeatgridEditor({ hash }: { hash: string }) {
     }
   }
   const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (touches.current.delete(event.pointerId) && pinch.current) {
+      if (touches.current.size < 2) pinch.current = null
+      return
+    }
     const current = drag.current
     drag.current = null
     if (current && !current.moved) {
@@ -269,6 +316,7 @@ export function BeatgridEditor({ hash }: { hash: string }) {
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
             onWheel={onWheel}
           />
           <canvas
@@ -283,7 +331,9 @@ export function BeatgridEditor({ hash }: { hash: string }) {
           />
         </div>
         <p className="hint">
-          Arraste a waveform para mover a grade · clique posiciona o cursor · Ctrl/⌘+roda aproxima
+          {touch
+            ? 'Arraste a waveform para mover a grade · toque posiciona o cursor · dois dedos aproximam e rolam · toque na visão geral para navegar'
+            : 'Arraste a waveform para mover a grade · clique posiciona o cursor · Ctrl/⌘+roda aproxima'}
         </p>
         <div className="grid-controls">
           <label>

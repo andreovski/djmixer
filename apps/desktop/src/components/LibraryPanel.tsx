@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import type { LibraryEntry } from '../../host/api.ts'
 import { addToGroup, importTracks, reanalyze, removeFromLibrary } from '../actions.ts'
 import { entryGrid } from '../editing.ts'
+import { COMPACT_QUERY, matches, TOUCH_QUERY, useMedia } from '../responsive.ts'
 import { useApp } from '../store.ts'
 import { formatTimestamp } from '@djmixer/shared'
 
@@ -14,6 +15,14 @@ export function LibraryPanel() {
   const set = useApp((s) => s.set)
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const touch = useMedia(TOUCH_QUERY)
+
+  // Em tela compacta o set fica em outra aba: depois de adicionar, mostra o grupo.
+  const add = (hash: string) => {
+    const before = useApp.getState().project
+    addToGroup(hash)
+    if (useApp.getState().project !== before && matches(COMPACT_QUERY)) set({ pane: 'set' })
+  }
 
   const entries = useMemo(() => {
     const text = filter.trim().toLowerCase()
@@ -63,8 +72,12 @@ export function LibraryPanel() {
               data-testid="library-item"
               className={`library-item${selected === entry.hash ? ' selected' : ''}`}
               onClick={() => setSelected(entry.hash)}
-              onDoubleClick={() => addToGroup(entry.hash)}
-              title="Dois cliques: adicionar ao grupo selecionado"
+              onDoubleClick={() => add(entry.hash)}
+              title={
+                touch
+                  ? 'Toque para selecionar; use Adicionar ao grupo'
+                  : 'Dois cliques: adicionar ao grupo selecionado'
+              }
             >
               <div className="li-main">
                 <div className="li-title">{entry.title}</div>
@@ -85,7 +98,7 @@ export function LibraryPanel() {
       </div>
       {selected && library[selected] && (
         <div className="library-actions">
-          <button onClick={() => addToGroup(selected)}>Adicionar ao grupo</button>
+          <button onClick={() => add(selected)}>Adicionar ao grupo</button>
           <button
             onClick={() => set({ gridEditor: selected })}
             disabled={!entryGrid(library[selected])}
