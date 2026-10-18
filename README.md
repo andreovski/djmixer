@@ -35,6 +35,7 @@ Requer Node 22.18+, pnpm 10 (`corepack enable` instala a versão certa) e o ffmp
 pnpm install
 pnpm dev                 # compila e abre o app desktop (baixa o Electron na primeira vez)
 pnpm dev:web             # o mesmo app num navegador, em http://localhost:5180 (diálogos viram prompts)
+pnpm --filter @djmixer/desktop build:web  # versão web, sem servidor, em apps/desktop/dist-web
 pnpm dev:playground      # abre o playground no navegador
 pnpm test                # testes (Vitest)
 pnpm lint                # ESLint + Prettier
@@ -42,6 +43,10 @@ pnpm typecheck           # TypeScript
 pnpm fixtures:synthetic  # gera faixas sintéticas em fixtures/synthetic/
 pnpm e2e                 # teste de ponta a ponta no Electron (precisa de pnpm --filter @djmixer/desktop build)
 ```
+
+### Versão web
+
+A versão web roda inteira no navegador, publicada em https://andreovski.github.io/djmixer/ a cada merge na `main`. O áudio não sai do computador: as faixas importadas ficam guardadas no navegador (IndexedDB), a decodificação usa o decodificador do navegador no lugar do ffmpeg (MP3, WAV, FLAC e AAC; AIFF e ALAC podem falhar), salvar o projeto e exportar o WAV viram downloads e abrir um projeto é escolher o arquivo. A biblioteca é de cada navegador. Funciona melhor no Chrome ou no Edge.
 
 ### Usando o app
 

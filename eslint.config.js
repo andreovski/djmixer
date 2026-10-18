@@ -6,7 +6,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
-      '**/dist-electron/**',
+      '**/dist-electron/**', '**/dist-web/**',
       'apps/desktop/test-results/**',
       '**/node_modules/**',
       'coverage/**',

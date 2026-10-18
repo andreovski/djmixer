@@ -11,3 +11,4 @@ apps/playground/public/codecs/
 apps/desktop/dist-electron/
 apps/desktop/test-results/
 apps/desktop/playwright-report/
+apps/desktop/dist-web/

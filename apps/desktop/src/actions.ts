@@ -255,7 +255,10 @@ export async function saveProject(saveAs = false): Promise<boolean> {
     )
     if (!path) return false
     state().set({ projectPath: path, dirty: false })
-    state().notify('info', `Projeto salvo em ${path}`)
+    state().notify(
+      'info',
+      host.kind === 'browser' ? `Projeto baixado como ${path}` : `Projeto salvo em ${path}`,
+    )
     return true
   } catch (error) {
     state().notify('error', `Não foi possível salvar: ${errorText(error)}`)

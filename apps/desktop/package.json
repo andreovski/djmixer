@@ -12,7 +12,9 @@
     "start": "electron .",
     "baixar-electron": "node node_modules/electron/install.js",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && tsc -p tsconfig.electron.json --noEmit",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:web": "VITE_DJMIXER_HOST=browser vite build --outDir dist-web",
+    "preview:web": "vite preview --outDir dist-web --port 5182"
   },
   "dependencies": {
     "@djmixer/analysis": "workspace:*",
