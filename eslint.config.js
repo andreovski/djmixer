@@ -4,7 +4,14 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', 'coverage/**', 'spikes/shell-tauri/src-tauri/**'],
+    ignores: [
+      '**/dist/**',
+      '**/dist-electron/**',
+      'apps/desktop/test-results/**',
+      '**/node_modules/**',
+      'coverage/**',
+      'spikes/shell-tauri/src-tauri/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.strict,
@@ -24,6 +31,11 @@ export default tseslint.config(
     languageOptions: {
       globals: { process: 'readonly', console: 'readonly', URL: 'readonly', Response: 'readonly' },
     },
+  },
+  {
+    // Nos testes, um `!` que falha derruba o teste, que é o que se quer.
+    files: ['**/*.test.ts'],
+    rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
   {
     files: ['**/*.cjs'],

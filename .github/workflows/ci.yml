@@ -25,3 +25,49 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm fixtures:synthetic
+
+  e2e:
+    # O app inteiro no Electron: importar, analisar, ensaiar, salvar e exportar (apps/desktop/e2e).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Dependências do sistema (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg xvfb pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+      - name: ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @djmixer/desktop build
+      # O binário vem direto do release do Electron, sem passar pelo instalador do pacote.
+      - name: Baixar o Electron
+        shell: bash
+        run: |
+          version=$(node -p "require('./apps/desktop/package.json').devDependencies.electron")
+          case "$RUNNER_OS" in
+            macOS) platform=darwin; bin=Electron.app/Contents/MacOS/Electron ;;
+            Linux) platform=linux; bin=electron ;;
+          esac
+          arch=$(node -p process.arch)
+          curl -fsSL -o "$RUNNER_TEMP/electron.zip" \
+            "https://github.com/electron/electron/releases/download/v$version/electron-v$version-$platform-$arch.zip"
+          unzip -q "$RUNNER_TEMP/electron.zip" -d "$RUNNER_TEMP/electron"
+          echo "ELECTRON_BIN=$RUNNER_TEMP/electron/$bin" >> "$GITHUB_ENV"
+      - name: Teste de ponta a ponta
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a pnpm --filter @djmixer/desktop e2e
+          else pnpm --filter @djmixer/desktop e2e; fi

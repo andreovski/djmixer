@@ -13,12 +13,15 @@
     "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
     "test": "vitest run",
     "build": "pnpm -r build",
+    "dev": "pnpm --filter @djmixer/desktop dev",
+    "dev:web": "pnpm --filter @djmixer/desktop dev:web",
     "dev:playground": "pnpm --filter @djmixer/playground dev",
     "fixtures:synthetic": "node scripts/gerar-faixas-sinteticas.ts",
     "fixtures:codecs": "node scripts/gerar-amostras-codecs.ts",
     "sondagem:electron": "pnpm fixtures:codecs && pnpm --filter @djmixer/playground build && pnpm --filter @djmixer/spike-shell-electron run baixar-electron && pnpm --filter @djmixer/spike-shell-electron run probe",
     "sondagem:tauri": "pnpm fixtures:codecs && pnpm --filter @djmixer/playground build && pnpm --filter @djmixer/spike-shell-tauri run probe",
-    "avaliar:analise": "node scripts/avaliar-analise.ts"
+    "avaliar:analise": "node scripts/avaliar-analise.ts",
+    "e2e": "pnpm --filter @djmixer/desktop e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

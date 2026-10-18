@@ -1,0 +1,23 @@
+{
+  // Processo principal do Electron: compilado para dist-electron/ porque o Electron não roda
+  // TypeScript direto.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "rewriteRelativeImportExtensions": true,
+    "outDir": "dist-electron",
+    "rootDir": "."
+  },
+  "include": [
+    "electron/main.ts",
+    "host/api.ts",
+    "host/library.ts",
+    "host/media.ts",
+    "host/service.ts"
+  ]
+}

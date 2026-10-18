@@ -8,3 +8,6 @@ coverage/
 fixtures/audio/
 fixtures/synthetic/
 apps/playground/public/codecs/
+apps/desktop/dist-electron/
+apps/desktop/test-results/
+apps/desktop/playwright-report/

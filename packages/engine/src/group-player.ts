@@ -23,6 +23,8 @@ export interface GroupOptions {
   /** Momento, no relógio do contexto, em que `fromBeat` toca. */
   startAt: number
   fromBeat?: Beat
+  /** Batida do grupo em que tudo para; o padrão é o fim do último clip. */
+  untilBeat?: Beat
 }
 
 export interface ScheduledGroup {
@@ -38,11 +40,20 @@ export function scheduleGroup(
   options: GroupOptions,
 ): ScheduledGroup {
   const fromBeat = options.fromBeat ?? 0
+  const untilBeat = options.untilBeat ?? Infinity
   const sources: AudioBufferSourceNode[] = []
+  const strips: AudioNode[] = []
   let endBeat = fromBeat
 
   for (const channel of channels) {
-    const plan = scheduleClip(channel.clip, channel.grid, options.bpm, options.startAt, fromBeat)
+    const plan = scheduleClip(
+      channel.clip,
+      channel.grid,
+      options.bpm,
+      options.startAt,
+      fromBeat,
+      untilBeat,
+    )
     if (!plan) continue
     const source = ctx.createBufferSource()
     source.buffer = channel.buffer
@@ -52,7 +63,10 @@ export function scheduleGroup(
     strip.output.connect(channel.output ?? ctx.destination)
 
     // A curva cobre o trecho audível do clip, do momento em que ele começa a soar até parar.
-    const clipEnd = channel.clip.startBeat + channel.clip.outBeat - channel.clip.inBeat
+    const clipEnd = Math.min(
+      untilBeat,
+      channel.clip.startBeat + channel.clip.outBeat - channel.clip.inBeat,
+    )
     const curveFrom = Math.max(fromBeat, channel.clip.startBeat)
     const curveStart = options.startAt + beatsToSeconds(curveFrom - fromBeat, options.bpm)
     const duration = plan.stopAt - curveStart
@@ -72,8 +86,10 @@ export function scheduleGroup(
     source.start(plan.when, plan.offset)
     source.stop(plan.stopAt)
     sources.push(source)
+    strips.push(strip.output)
     endBeat = Math.max(endBeat, clipEnd)
   }
+  if (Number.isFinite(untilBeat)) endBeat = Math.max(endBeat, untilBeat)
 
   return {
     durationSeconds: beatsToSeconds(endBeat - fromBeat, options.bpm),
@@ -85,6 +101,7 @@ export function scheduleGroup(
           // Já parado.
         }
       }
+      for (const output of strips) output.disconnect()
     },
   }
 }
