@@ -49,37 +49,41 @@ describe.skipIf(!hasFfmpeg)('host com ffmpeg', () => {
     expect(resolved?.path).toBe(moved)
   })
 
-  it('importa de URL pelo yt-dlp e guarda a página de origem', async () => {
-    // yt-dlp de mentira: copia um WAV para o destino e imprime o JSON pedido em --print.
-    const source = join(dir, 'baixada.wav')
-    tone(source, 1)
-    const fake = join(dir, 'yt-dlp')
-    writeFileSync(
-      fake,
-      `#!/bin/sh
+  // O yt-dlp de mentira é um script sh, que o Windows não roda.
+  it.skipIf(process.platform === 'win32')(
+    'importa de URL pelo yt-dlp e guarda a página de origem',
+    async () => {
+      // yt-dlp de mentira: copia um WAV para o destino e imprime o JSON pedido em --print.
+      const source = join(dir, 'baixada.wav')
+      tone(source, 1)
+      const fake = join(dir, 'yt-dlp')
+      writeFileSync(
+        fake,
+        `#!/bin/sh
 while [ "$1" != "--output" ]; do shift; done
 target=$(echo "$2" | sed 's/%(extractor)s-%(id)s.%(ext)s/soundcloud-42.wav/')
 cp '${source}' "$target"
 echo "[download] Destination: $target"
 printf '{"filepath": "%s", "webpage_url": "https://soundcloud.com/a/b"}\n' "$target"
 `,
-    )
-    chmodSync(fake, 0o755)
-    process.env.DJMIXER_YTDLP = fake
-    try {
-      const { entries, errors } = await service.importFromUrl('https://soundcloud.com/a/b')
-      expect(errors).toEqual([])
-      expect(entries[0]).toMatchObject({
-        title: 'soundcloud-42',
-        sourceUrl: 'https://soundcloud.com/a/b',
-      })
-      const listed = (await service.listLibrary()).find((e) => e.hash === entries[0]?.hash)
-      expect(listed?.sourceUrl).toBe('https://soundcloud.com/a/b')
-      await expect(service.importFromUrl('soundcloud.com/a/b')).rejects.toThrow('https://')
-    } finally {
-      delete process.env.DJMIXER_YTDLP
-    }
-  })
+      )
+      chmodSync(fake, 0o755)
+      process.env.DJMIXER_YTDLP = fake
+      try {
+        const { entries, errors } = await service.importFromUrl('https://soundcloud.com/a/b')
+        expect(errors).toEqual([])
+        expect(entries[0]).toMatchObject({
+          title: 'soundcloud-42',
+          sourceUrl: 'https://soundcloud.com/a/b',
+        })
+        const listed = (await service.listLibrary()).find((e) => e.hash === entries[0]?.hash)
+        expect(listed?.sourceUrl).toBe('https://soundcloud.com/a/b')
+        await expect(service.importFromUrl('soundcloud.com/a/b')).rejects.toThrow('https://')
+      } finally {
+        delete process.env.DJMIXER_YTDLP
+      }
+    },
+  )
 })
 
 describe('host', () => {
