@@ -15,6 +15,7 @@ Entram no app desktop (`apps/desktop`) a partir da fase 1.
 | @soundtouchjs/core  | MPL-2.0 (pacote npm)               | time-stretch comparado no spike 3        | 2.1.1; só o playground e os testes usam, o app não chama                                                                                        |
 | essentia.js         | AGPL-3.0                           | BPM, key, beats (decisão 0009)           | 0.1.3 (LICENSE do pacote conferido); só os algoritmos clássicos, os modelos de ML (CC BY-NC-ND 4.0) não entram                                  |
 | FFmpeg (executável) | LGPL ou GPL, conforme a compilação | decodificação                            | na fase 1 vem do sistema (PATH ou `DJMIXER_FFMPEG`), não é distribuído; embutir no release exige escolher uma compilação LGPL ou GPL compatível |
+| yt-dlp (executável) | Unlicense                          | "Importar de URL" (decisão 0013)         | vem do sistema (PATH ou `DJMIXER_YTDLP`), não é distribuído; só o app desktop chama                                                             |
 
 ## Só de desenvolvimento
 

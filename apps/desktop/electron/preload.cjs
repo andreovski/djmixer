@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 const METHODS = [
   'pickAudioFiles',
   'importFiles',
+  'importFromUrl',
   'listLibrary',
   'removeFromLibrary',
   'saveAnalysis',

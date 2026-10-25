@@ -10,6 +10,7 @@ import {
   moveClip,
   snapBeat,
   trimClip,
+  urlTracksInSet,
 } from './editing.ts'
 
 const entry = (hash: string, bpm: number, seconds: number): LibraryEntry => ({
@@ -103,5 +104,25 @@ describe('montagem do grupo', () => {
     expect(snapBeat(5.4, 'bar')).toBe(4)
     expect(snapBeat(5.6, 'beat')).toBe(6)
     expect(snapBeat(5.555, 'off')).toBe(5.56)
+  })
+})
+
+describe('faixas baixadas de URL', () => {
+  it('bloqueiam o export só quando estão num grupo', () => {
+    const { project, groupId } = twoTracks()
+    const library = {
+      aaaa: entry('aaaa', 120, 60.5),
+      bbbb: { ...entry('bbbb', 126, 90), sourceUrl: 'https://soundcloud.com/x/bbbb' },
+    }
+    expect(urlTracksInSet(project, library)).toEqual(['bbbb'])
+    const group = project.groups.find((g) => g.id === groupId)
+    const onlyFirst = {
+      ...project,
+      groups: project.groups.map((g) =>
+        g.id === groupId ? { ...g, channels: g.channels.slice(0, 1), transitions: [] } : g,
+      ),
+    }
+    expect(group?.channels).toHaveLength(2)
+    expect(urlTracksInSet(onlyFirst, library)).toEqual([])
   })
 })

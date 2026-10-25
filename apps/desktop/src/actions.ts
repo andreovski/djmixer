@@ -9,7 +9,13 @@ import {
 } from '@djmixer/shared'
 import type { LibraryEntry, UserEdits } from '../host/api.ts'
 import { decodedPcm, errorText, exportSet, stop } from './audio.ts'
-import { addTrackToGroup, applyGridEdit, createGroup, pruneTracks } from './editing.ts'
+import {
+  addTrackToGroup,
+  applyGridEdit,
+  createGroup,
+  pruneTracks,
+  urlTracksInSet,
+} from './editing.ts'
 import { host } from './host.ts'
 import { currentGroup, useApp } from './store.ts'
 import type { AnalysisRequest, AnalysisResponse } from './workers/analysis.worker.ts'
@@ -53,6 +59,24 @@ export async function importTracks(): Promise<void> {
   else state().set({ notice: null })
   queueAnalysis(entries.filter((entry) => !entry.analysis))
   for (const entry of entries) if (entry.analysis) void loadPeaks(entry.hash)
+}
+
+/** Baixa com o yt-dlp do host (ver host/url-import.ts). Devolve se importou alguma faixa. */
+export async function importFromUrl(url: string): Promise<boolean> {
+  if (!host.importFromUrl) return false
+  state().notify('info', `Baixando ${url}...`)
+  try {
+    const { entries, errors } = await host.importFromUrl(url)
+    putEntries(entries)
+    if (errors.length) state().notify('error', `Não importados: ${errors.join('; ')}`)
+    else state().notify('info', `${entries.length} faixa(s) baixada(s).`)
+    queueAnalysis(entries.filter((entry) => !entry.analysis))
+    for (const entry of entries) if (entry.analysis) void loadPeaks(entry.hash)
+    return entries.length > 0
+  } catch (error) {
+    state().notify('error', `Download falhou: ${errorText(error)}`)
+    return false
+  }
 }
 
 // A análise roda uma faixa por vez num worker (Essentia ocupa bastante memória).
@@ -267,6 +291,14 @@ export async function saveProject(saveAs = false): Promise<boolean> {
 }
 
 export async function exportProject(): Promise<void> {
+  const blocked = urlTracksInSet(state().project, state().library)
+  if (blocked.length) {
+    state().notify(
+      'error',
+      `Este set não pode ser exportado: tem faixas baixadas de URL, que ficam só dentro do app (${blocked.join(', ')}).`,
+    )
+    return
+  }
   stop()
   try {
     const result = await exportSet(state().project, (label, fraction) =>

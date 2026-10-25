@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// "Importar de URL": baixa o áudio de uma página (faixa ou playlist do SoundCloud, por exemplo)
+// com o yt-dlp do sistema, para uso pessoal (docs/decisoes/0013). O yt-dlp recusa conteúdo com
+// DRM, então serviços como Spotify e as faixas Go+ do SoundCloud ficam de fora.
+import { dirname } from 'node:path'
+import { findTool, run } from './media.ts'
+
+export interface DownloadedFile {
+  path: string
+  /** Página da faixa (numa playlist, a de cada faixa, não a da playlist). */
+  pageUrl: string
+}
+
+export function isHttpUrl(text: string): boolean {
+  try {
+    const url = new URL(text)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Baixa o melhor áudio disponível para `dir`, com título e artista gravados no arquivo (o ffprobe
+ * os lê na importação). Um arquivo já baixado não é baixado de novo.
+ */
+export async function downloadAudio(url: string, dir: string): Promise<DownloadedFile[]> {
+  if (!isHttpUrl(url)) throw new Error('Cole um endereço que comece com https://')
+  const ffmpeg = findTool('ffmpeg')
+  const out = await run('yt-dlp', [
+    '--no-progress',
+    '--no-warnings',
+    '--yes-playlist',
+    '--format',
+    'bestaudio/best',
+    '--embed-metadata',
+    // Sem um caminho, o yt-dlp procura só no PATH, que apps abertos pelo Finder não herdam.
+    ...(ffmpeg.includes('/') ? ['--ffmpeg-location', dirname(ffmpeg)] : []),
+    '--output',
+    `${dir}/%(extractor)s-%(id)s.%(ext)s`,
+    // --print sozinho só simula; --no-simulate faz baixar e imprimir.
+    '--no-simulate',
+    '--print',
+    'after_move:%(.{filepath,webpage_url})j',
+    '--',
+    url,
+  ])
+  return out
+    .split('\n')
+    .filter((line) => line.startsWith('{'))
+    .map((line) => {
+      const info = JSON.parse(line) as { filepath?: string; webpage_url?: string }
+      if (!info.filepath) throw new Error('o yt-dlp não informou o arquivo baixado')
+      return { path: info.filepath, pageUrl: info.webpage_url ?? url }
+    })
+}

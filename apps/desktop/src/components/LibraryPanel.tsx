@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Biblioteca: importar arquivos locais, ver BPM, tom (Camelot) e estado da análise, e mandar uma
+// Biblioteca: importar arquivos locais ou de uma URL (yt-dlp, só no app desktop), ver BPM, tom (Camelot) e estado da análise, e mandar uma
 // faixa para o grupo selecionado.
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import type { LibraryEntry } from '../../host/api.ts'
-import { addToGroup, importTracks, reanalyze, removeFromLibrary } from '../actions.ts'
+import {
+  addToGroup,
+  importFromUrl,
+  importTracks,
+  reanalyze,
+  removeFromLibrary,
+} from '../actions.ts'
+import { host } from '../host.ts'
 import { entryGrid } from '../editing.ts'
 import { COMPACT_QUERY, matches, TOUCH_QUERY, useMedia } from '../responsive.ts'
 import { useApp } from '../store.ts'
@@ -15,6 +22,9 @@ export function LibraryPanel() {
   const set = useApp((s) => s.set)
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [urlOpen, setUrlOpen] = useState(false)
+  const [url, setUrl] = useState('')
+  const [downloading, setDownloading] = useState(false)
   const touch = useMedia(TOUCH_QUERY)
 
   // Em tela compacta o set fica em outra aba: depois de adicionar, mostra o grupo.
@@ -30,6 +40,18 @@ export function LibraryPanel() {
       .filter((entry) => !text || `${entry.title} ${entry.artist}`.toLowerCase().includes(text))
       .sort((a, b) => a.title.localeCompare(b.title))
   }, [library, filter])
+
+  const submitUrl = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!url.trim() || downloading) return
+    setDownloading(true)
+    const ok = await importFromUrl(url.trim())
+    setDownloading(false)
+    if (ok) {
+      setUrl('')
+      setUrlOpen(false)
+    }
+  }
 
   const status = (entry: LibraryEntry) => {
     const info = analysis[entry.hash]
@@ -49,10 +71,33 @@ export function LibraryPanel() {
     <aside className="library">
       <div className="panel-title">
         <span>Biblioteca</span>
-        <button className="primary" onClick={() => void importTracks()}>
-          Importar…
-        </button>
+        <div className="panel-buttons">
+          {host.importFromUrl && (
+            <button onClick={() => setUrlOpen(!urlOpen)} aria-expanded={urlOpen}>
+              De URL…
+            </button>
+          )}
+          <button className="primary" onClick={() => void importTracks()}>
+            Importar…
+          </button>
+        </div>
       </div>
+      {urlOpen && (
+        <form className="url-import" onSubmit={(event) => void submitUrl(event)}>
+          <input
+            id="import-url"
+            type="url"
+            placeholder="https://soundcloud.com/artista/faixa"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            disabled={downloading}
+            autoFocus
+          />
+          <button type="submit" className="primary" disabled={downloading || !url.trim()}>
+            {downloading ? 'Baixando…' : 'Baixar'}
+          </button>
+        </form>
+      )}
       <input
         className="filter"
         placeholder="Filtrar por título ou artista"
@@ -81,7 +126,17 @@ export function LibraryPanel() {
             >
               <div className="li-main">
                 <div className="li-title">{entry.title}</div>
-                <div className="li-sub">{entry.artist || '—'}</div>
+                <div className="li-sub">
+                  {entry.sourceUrl && (
+                    <span
+                      className="li-source"
+                      title={`Baixada de ${entry.sourceUrl}; não entra no export`}
+                    >
+                      URL
+                    </span>
+                  )}
+                  {entry.artist || '—'}
+                </div>
               </div>
               <div className="li-meta">
                 <span className="bpm" data-testid="bpm">

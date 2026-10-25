@@ -39,6 +39,7 @@ const WORKER_CSP = CSP.replace("'wasm-unsafe-eval'", "'wasm-unsafe-eval' 'unsafe
 const METHODS = [
   'pickAudioFiles',
   'importFiles',
+  'importFromUrl',
   'listLibrary',
   'removeFromLibrary',
   'saveAnalysis',
