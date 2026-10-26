@@ -151,3 +151,62 @@ export function decodeToCache(source: string, hash: string, dir: string): Promis
   pending.set(target, job)
   return job
 }
+
+export const COVER_SIZE = 160
+
+// Extrair capas é rápido, mas uma biblioteca grande pede todas de uma vez ao abrir.
+const COVER_JOBS = 2
+let coverJobs = 0
+const coverQueue: (() => void)[] = []
+
+async function withCoverSlot<T>(job: () => Promise<T>): Promise<T> {
+  if (coverJobs >= COVER_JOBS) await new Promise<void>((resolve) => coverQueue.push(resolve))
+  coverJobs++
+  try {
+    return await job()
+  } finally {
+    coverJobs--
+    coverQueue.shift()?.()
+  }
+}
+
+/**
+ * Grava em `target` um JPEG quadrado de COVER_SIZE px a partir da primeira fonte com imagem: uma
+ * imagem solta (a capa baixada pelo yt-dlp) ou a capa embutida num arquivo de áudio. Devolve
+ * false se nenhuma fonte tem imagem.
+ */
+export function extractCover(sources: string[], target: string): Promise<boolean> {
+  return withCoverSlot(async () => {
+    for (const source of sources) {
+      if (!existsSync(source)) continue
+      const temp = `${target}.${process.pid}.tmp`
+      try {
+        await run('ffmpeg', [
+          '-v',
+          'error',
+          '-nostdin',
+          '-y',
+          '-i',
+          source,
+          '-map',
+          '0:v:0',
+          '-frames:v',
+          '1',
+          '-vf',
+          `scale=${COVER_SIZE}:${COVER_SIZE}:force_original_aspect_ratio=increase,crop=${COVER_SIZE}:${COVER_SIZE}`,
+          '-f',
+          'image2',
+          '-c:v',
+          'mjpeg',
+          temp,
+        ])
+        await rename(temp, target)
+        return true
+      } catch {
+        // Sem imagem nesta fonte: tenta a próxima.
+        await rm(temp, { force: true })
+      }
+    }
+    return false
+  })
+}

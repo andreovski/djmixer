@@ -53,6 +53,13 @@ export interface LibraryEntry {
   sourceUrl?: string
 }
 
+/** Playlist da biblioteca: um nome e as faixas (por hash), na ordem em que foram adicionadas. */
+export interface Playlist {
+  id: string
+  name: string
+  hashes: string[]
+}
+
 export interface ExportTarget {
   id: string
   wavPath: string
@@ -91,6 +98,15 @@ export interface HostApi {
   removeFromLibrary(hash: string): Promise<void>
   saveAnalysis(hash: string, analysis: TrackAnalysis, peaks: Uint8Array): Promise<void>
   saveEdits(hash: string, edits: UserEdits): Promise<void>
+  /**
+   * Capa da faixa em JPEG pequeno (a embutida no arquivo ou a baixada junto pelo "Importar de
+   * URL"), ou null se não há. Opcional: a versão web não tem ffmpeg para extrair.
+   */
+  getCover?(hash: string): Promise<Uint8Array | null>
+  listPlaylists(): Promise<Playlist[]>
+  /** Cria ou substitui a playlist inteira. */
+  savePlaylist(playlist: Playlist): Promise<void>
+  deletePlaylist(id: string): Promise<void>
   /** Picos da waveform (ver src/waveform.ts), ou null se a faixa não foi analisada. */
   getPeaks(hash: string): Promise<Uint8Array | null>
   /**

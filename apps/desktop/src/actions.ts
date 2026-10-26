@@ -7,7 +7,7 @@ import {
   type Beatgrid,
   type Cue,
 } from '@djmixer/shared'
-import type { LibraryEntry, UserEdits } from '../host/api.ts'
+import type { LibraryEntry, Playlist, UserEdits } from '../host/api.ts'
 import { decodedPcm, errorText, exportSet, stop } from './audio.ts'
 import {
   addTrackToGroup,
@@ -17,6 +17,7 @@ import {
   urlTracksInSet,
 } from './editing.ts'
 import { host } from './host.ts'
+import { addTrack, removeTrack, uniqueName } from './playlists.ts'
 import { currentGroup, useApp } from './store.ts'
 import type { AnalysisRequest, AnalysisResponse } from './workers/analysis.worker.ts'
 
@@ -29,6 +30,7 @@ function putEntries(entries: LibraryEntry[]) {
 }
 
 export async function loadLibrary(): Promise<void> {
+  void loadPlaylists()
   try {
     const entries = await host.listLibrary()
     putEntries(entries)
@@ -163,7 +165,98 @@ export async function removeFromLibrary(hash: string): Promise<void> {
   const library = Object.fromEntries(
     Object.entries(state().library).filter(([candidate]) => candidate !== hash),
   )
-  state().set({ library })
+  // O host já tirou a faixa das playlists guardadas.
+  const playlists = state().playlists.map((p) =>
+    p.hashes.includes(hash) ? removeTrack(p, hash) : p,
+  )
+  state().set({ library, playlists })
+}
+
+// Capas: pedidas ao host uma vez por faixa e guardadas como URL blob.
+const coverRequests = new Set<string>()
+
+export function loadCover(hash: string): void {
+  if (!host.getCover || coverRequests.has(hash)) return
+  coverRequests.add(hash)
+  host
+    .getCover(hash)
+    .then((bytes) => {
+      const url = bytes
+        ? URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/jpeg' }))
+        : null
+      state().set({ covers: { ...state().covers, [hash]: url } })
+    })
+    .catch(() => state().set({ covers: { ...state().covers, [hash]: null } }))
+}
+
+export async function loadPlaylists(): Promise<void> {
+  try {
+    state().set({ playlists: await host.listPlaylists() })
+  } catch (error) {
+    state().notify('error', `Playlists: ${errorText(error)}`)
+  }
+}
+
+async function storePlaylist(playlist: Playlist): Promise<void> {
+  const others = state().playlists
+  const exists = others.some((p) => p.id === playlist.id)
+  state().set({
+    playlists: exists
+      ? others.map((p) => (p.id === playlist.id ? playlist : p))
+      : [...others, playlist],
+  })
+  try {
+    await host.savePlaylist(playlist)
+  } catch (error) {
+    state().notify('error', `Não foi possível salvar a playlist: ${errorText(error)}`)
+  }
+}
+
+/** Cria a playlist, já com as faixas dadas, e passa a mostrá-la. */
+export async function createPlaylist(name: string, hashes: string[] = []): Promise<void> {
+  const playlist = {
+    id: crypto.randomUUID(),
+    name: uniqueName(state().playlists, name.trim() || 'Playlist'),
+    hashes,
+  }
+  await storePlaylist(playlist)
+  state().set({ playlistId: playlist.id })
+}
+
+export async function renamePlaylist(id: string, name: string): Promise<void> {
+  const playlist = state().playlists.find((p) => p.id === id)
+  const others = state().playlists.filter((p) => p.id !== id)
+  if (playlist && name.trim())
+    await storePlaylist({ ...playlist, name: uniqueName(others, name.trim()) })
+}
+
+export async function deletePlaylist(id: string): Promise<void> {
+  state().set({
+    playlists: state().playlists.filter((p) => p.id !== id),
+    playlistId: state().playlistId === id ? null : state().playlistId,
+  })
+  try {
+    await host.deletePlaylist(id)
+  } catch (error) {
+    state().notify('error', `Não foi possível apagar a playlist: ${errorText(error)}`)
+  }
+}
+
+export async function addToPlaylist(id: string, hash: string): Promise<void> {
+  const playlist = state().playlists.find((p) => p.id === id)
+  if (!playlist) return
+  const next = addTrack(playlist, hash)
+  if (next === playlist) {
+    state().notify('info', `A faixa já está em "${playlist.name}".`)
+    return
+  }
+  await storePlaylist(next)
+  state().notify('info', `Adicionada a "${playlist.name}".`)
+}
+
+export async function removeFromPlaylist(id: string, hash: string): Promise<void> {
+  const playlist = state().playlists.find((p) => p.id === id)
+  if (playlist) await storePlaylist(removeTrack(playlist, hash))
 }
 
 /** Põe a faixa no grupo selecionado (criando um grupo se não houver nenhum). */

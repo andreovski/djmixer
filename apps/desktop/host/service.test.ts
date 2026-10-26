@@ -2,7 +2,15 @@
 // Host sem Electron: importar, decodificar com ffmpeg, achar faixa movida pelo hash, salvar
 // projeto e escrever o WAV em partes. Pula o que depende do ffmpeg se ele não estiver instalado.
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -79,6 +87,22 @@ printf '{"filepath": "%s", "webpage_url": "https://soundcloud.com/a/b"}\n' "$tar
         const listed = (await service.listLibrary()).find((e) => e.hash === entries[0]?.hash)
         expect(listed?.sourceUrl).toBe('https://soundcloud.com/a/b')
         await expect(service.importFromUrl('soundcloud.com/a/b')).rejects.toThrow('https://')
+        // Capa baixada ao lado do áudio (coverSidecar).
+        const sidecar = join(dir, 'dados', 'downloads', 'soundcloud-42.jpg')
+        spawnSync('ffmpeg', [
+          '-v',
+          'error',
+          '-f',
+          'lavfi',
+          '-i',
+          'color=red:s=300x200',
+          '-frames:v',
+          '1',
+          '-y',
+          sidecar,
+        ])
+        const cover = await service.getCover(entries[0]?.hash ?? '')
+        expect([...(cover ?? new Uint8Array()).subarray(0, 2)]).toEqual([0xff, 0xd8])
       } finally {
         delete process.env.DJMIXER_YTDLP
       }
@@ -86,7 +110,68 @@ printf '{"filepath": "%s", "webpage_url": "https://soundcloud.com/a/b"}\n' "$tar
   )
 })
 
+describe.skipIf(!hasFfmpeg)('capas', () => {
+  it('extrai a capa embutida e lembra das faixas sem capa', async () => {
+    const plain = join(dir, 'sem-capa.wav')
+    tone(plain, 3)
+    const art = join(dir, 'capa.png')
+    spawnSync('ffmpeg', [
+      '-v',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=blue:s=500x500',
+      '-frames:v',
+      '1',
+      '-y',
+      art,
+    ])
+    const withArt = join(dir, 'com-capa.mp3')
+    spawnSync('ffmpeg', [
+      '-v',
+      'error',
+      '-i',
+      plain,
+      '-i',
+      art,
+      '-map',
+      '0:a',
+      '-map',
+      '1:v',
+      '-c:v',
+      'png',
+      '-disposition:v',
+      'attached_pic',
+      '-y',
+      withArt,
+    ])
+    const { entries } = await service.importFiles([plain, withArt])
+    const [noCover, cover] = await Promise.all(entries.map((e) => service.getCover(e.hash)))
+    expect(noCover).toBeNull()
+    expect(existsSync(join(dir, 'dados', 'cache', 'covers', `${entries[0]?.hash}.none`))).toBe(true)
+    expect([...(cover ?? new Uint8Array()).subarray(0, 2)]).toEqual([0xff, 0xd8])
+  })
+})
+
 describe('host', () => {
+  it('guarda playlists e tira delas a faixa removida da biblioteca', async () => {
+    await service.savePlaylist({ id: 'p1', name: 'Warm up', hashes: ['h1', 'h2'] })
+    await service.savePlaylist({ id: 'p2', name: 'Pico', hashes: ['h2'] })
+    await service.savePlaylist({ id: 'p1', name: 'Abertura', hashes: ['h1', 'h2'] })
+    await service.removeFromLibrary('h2')
+    expect(await service.listPlaylists()).toEqual([
+      { id: 'p1', name: 'Abertura', hashes: ['h1'] },
+      { id: 'p2', name: 'Pico', hashes: [] },
+    ])
+    await service.deletePlaylist('p2')
+    expect((await service.listPlaylists()).map((p) => p.id)).toEqual(['p1'])
+  })
+
+  it('não procura capa com chave inválida', async () => {
+    expect(await service.getCover('../x')).toBeNull()
+  })
+
   it('acrescenta a coluna da origem numa biblioteca antiga', () => {
     const file = join(dir, 'antiga.sqlite')
     const old = new DatabaseSync(file)

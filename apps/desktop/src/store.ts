@@ -10,7 +10,7 @@ import {
   type Track,
 } from '@djmixer/shared'
 import { create } from 'zustand'
-import type { LibraryEntry } from '../host/api.ts'
+import type { LibraryEntry, Playlist } from '../host/api.ts'
 
 export type AnalysisStatus = 'pending' | 'analyzing' | 'done' | 'error'
 export type Snap = 'bar' | 'beat' | 'off'
@@ -41,6 +41,11 @@ export interface AppState {
   library: Record<string, LibraryEntry>
   analysis: Record<string, { status: AnalysisStatus; error?: string }>
   peaks: Record<string, Uint8Array>
+  /** URL (blob:) da capa de cada faixa; null quando a faixa não tem capa. */
+  covers: Record<string, string | null>
+  playlists: Playlist[]
+  /** Playlist mostrada na biblioteca; null mostra todas as faixas. */
+  playlistId: string | null
   /** Faixas do projeto aberto que não foram achadas no disco (por hash). */
   missing: string[]
 
@@ -83,6 +88,9 @@ export const useApp = create<AppState>((set, get) => ({
   library: {},
   analysis: {},
   peaks: {},
+  covers: {},
+  playlists: [],
+  playlistId: null,
   missing: [],
 
   groupId: null,

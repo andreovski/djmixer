@@ -165,14 +165,42 @@ label {
   display: flex;
   gap: 6px;
 }
-.url-import {
+.inline-form {
   display: flex;
   gap: 6px;
   margin: 0 12px 8px;
 }
-.url-import input {
+.inline-form input {
   flex: 1;
   min-width: 0;
+}
+.playlist-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 12px 8px;
+}
+.playlist-bar select {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+.li-cover {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+button.danger {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.li-cover-empty {
+  display: grid;
+  place-items: center;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-weight: 600;
 }
 .li-source {
   margin-right: 6px;
@@ -202,6 +230,7 @@ label {
   background: #253545;
 }
 .li-main {
+  flex: 1;
   min-width: 0;
 }
 .li-title,

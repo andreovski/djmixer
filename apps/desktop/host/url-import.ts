@@ -42,6 +42,10 @@ export async function downloadAudio(
       '--format',
       'bestaudio/best',
       '--embed-metadata',
+      // A capa fica ao lado do áudio, com o mesmo nome e extensão .jpg (ver coverSidecar).
+      '--write-thumbnail',
+      '--convert-thumbnails',
+      'jpg',
       // Sem um caminho, o yt-dlp procura só no PATH, que apps abertos pelo Finder não herdam.
       ...(isAbsolute(ffmpeg) ? ['--ffmpeg-location', dirname(ffmpeg)] : []),
       '--output',
@@ -63,4 +67,9 @@ export async function downloadAudio(
       if (!info.filepath) throw new Error('o yt-dlp não informou o arquivo baixado')
       return { path: info.filepath, pageUrl: info.webpage_url ?? url }
     })
+}
+
+/** Caminho da capa que o yt-dlp grava ao lado de um áudio baixado. */
+export function coverSidecar(audioPath: string): string {
+  return audioPath.replace(/\.[^./\\]+$/, '') + '.jpg'
 }
