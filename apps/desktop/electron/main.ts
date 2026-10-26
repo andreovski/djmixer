@@ -43,6 +43,10 @@ const METHODS = [
   'ytDlpStatus',
   'listLibrary',
   'revealTrack',
+  'pickEditor',
+  'editorIcon',
+  'openInEditor',
+  'checkEdited',
   'removeFromLibrary',
   'saveAnalysis',
   'saveEdits',
@@ -121,6 +125,22 @@ const dialogs: Dialogs = {
   },
   async reveal(path) {
     shell.showItemInFolder(path)
+  },
+  async pickApplication() {
+    const mac = process.platform === 'darwin'
+    const result = await showOpen({
+      title: 'Escolha o editor de áudio (iZotope RX, por exemplo)',
+      properties: ['openFile'],
+      ...(mac && {
+        defaultPath: '/Applications',
+        filters: [{ name: 'Aplicativos', extensions: ['app'] }],
+      }),
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  },
+  async appIcon(path) {
+    const icon = await app.getFileIcon(path, { size: 'large' }).catch(() => null)
+    return icon && !icon.isEmpty() ? new Uint8Array(icon.toPNG()) : null
   },
 }
 

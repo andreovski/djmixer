@@ -1,13 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Implementação do host sem nada do Electron: o processo principal e o servidor de
 // desenvolvimento a embrulham, cada um com seus diálogos e seu transporte.
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { open, readFile, rename, rm, writeFile, type FileHandle } from 'node:fs/promises'
+import {
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+  type FileHandle,
+} from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 import type { ExportResult, ExportTarget, HostApi, LibraryEntry, YtDlpStatus } from './api.ts'
 import { Library } from './library.ts'
-import { audioInfo, decodeToCache, extractCover, hashFile, probe } from './media.ts'
+import {
+  AUDIO_EXTENSIONS,
+  audioInfo,
+  decodeToCache,
+  extractCover,
+  hashFile,
+  probe,
+} from './media.ts'
 import { coverSidecar, downloadAudio, downloadThumbnail } from './url-import.ts'
 import { createYtDlp } from './ytdlp.ts'
 
@@ -19,6 +36,10 @@ export interface Dialogs {
   locateTrack(entry: LibraryEntry | null): Promise<string | null>
   /** Mostra o arquivo no Finder (ou no gerenciador de arquivos do sistema). */
   reveal(path: string): Promise<void>
+  /** Pede um aplicativo (no macOS, um .app); null se cancelou. */
+  pickApplication(): Promise<string | null>
+  /** Ícone do aplicativo em PNG; null se o shell não sabe ler. */
+  appIcon(path: string): Promise<Uint8Array | null>
 }
 
 export type HostService = Omit<
@@ -30,7 +51,15 @@ export type HostService = Omit<
   | 'getAudioInfo'
   | 'revealTrack'
   | 'ytDlpStatus'
+  | 'pickEditor'
+  | 'editorIcon'
+  | 'openInEditor'
+  | 'checkEdited'
 > & {
+  pickEditor: NonNullable<HostApi['pickEditor']>
+  editorIcon: NonNullable<HostApi['editorIcon']>
+  openInEditor: NonNullable<HostApi['openInEditor']>
+  checkEdited: NonNullable<HostApi['checkEdited']>
   revealTrack: NonNullable<HostApi['revealTrack']>
   getAudioInfo: NonNullable<HostApi['getAudioInfo']>
   importFromUrl: NonNullable<HostApi['importFromUrl']>
@@ -47,6 +76,31 @@ export type HostService = Omit<
 }
 
 export const PROJECT_EXTENSION = 'djmix'
+
+/** Abre `path` no aplicativo `app`: no macOS com `open -a`, nos outros executando o programa. */
+function openWith(app: string, path: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const mac = process.platform === 'darwin'
+    const child = mac
+      ? spawn('open', ['-a', app, path], { stdio: ['ignore', 'ignore', 'pipe'] })
+      : spawn(app, [path], { stdio: 'ignore', detached: true })
+    let err = ''
+    child.stderr?.on('data', (chunk: Buffer) => (err += chunk.toString()))
+    child.on('error', (error) =>
+      reject(new Error(`não foi possível abrir ${app}: ${error.message}`)),
+    )
+    if (mac) {
+      child.on('close', (code) =>
+        code === 0 ? resolve() : reject(new Error(err.trim() || `não foi possível abrir ${app}`)),
+      )
+    } else {
+      child.on('spawn', () => {
+        child.unref()
+        resolve()
+      })
+    }
+  })
+}
 
 const SAFE_KEY = /^[A-Za-z0-9._-]{1,200}$/
 
@@ -130,6 +184,59 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
       await Promise.all(files.map((file) => rm(file, { force: true })))
     },
 
+    pickEditor: () => dialogs.pickApplication(),
+    editorIcon: (editor) => dialogs.appIcon(editor),
+
+    async openInEditor(hash, editor) {
+      const entry = library.get(hash)
+      if (!entry) throw new Error('faixa não está na biblioteca')
+      if (entry.missing) throw new Error(`arquivo não encontrado: ${entry.path}`)
+      const since = Date.now()
+      await openWith(editor, entry.path)
+      return since
+    },
+
+    async checkEdited(hash, since) {
+      const entry = library.get(hash)
+      if (!entry || !SAFE_KEY.test(hash)) return null
+      const dir = dirname(entry.path)
+      const stem = basename(entry.path, extname(entry.path))
+      // O próprio arquivo regravado, ou um irmão "nome….wav" do "Salvar como".
+      const names = await readdir(dir).catch(() => [] as string[])
+      const candidates: { path: string; mtime: number }[] = []
+      const known = new Set(library.list().map((other) => other.path))
+      for (const name of names) {
+        const path = join(dir, name)
+        const ext = extname(name).slice(1).toLowerCase()
+        if (!name.startsWith(stem) || !AUDIO_EXTENSIONS.includes(ext)) continue
+        if (path !== entry.path && known.has(path)) continue
+        const info = await stat(path).catch(() => null)
+        if (info?.isFile() && info.mtimeMs > since) candidates.push({ path, mtime: info.mtimeMs })
+      }
+      candidates.sort((a, b) => b.mtime - a.mtime)
+      for (const candidate of candidates) {
+        const newHash = await hashFile(candidate.path).catch(() => null)
+        if (!newHash || newHash === hash) continue
+        const { durationSeconds } = await probe(candidate.path)
+        library.replace(hash, { hash: newHash, path: candidate.path, durationSeconds })
+        // A capa vai junto; o áudio decodificado do arquivo antigo não serve mais.
+        const cover = join(coversDir, `${hash}.jpg`)
+        if (existsSync(cover)) await rename(cover, join(coversDir, `${newHash}.jpg`))
+        await rm(join(coversDir, `${hash}.nocover`), { force: true })
+        await rm(join(decodedDir, `${hash}.f32`), { force: true })
+        if (candidate.path !== entry.path && entry.sourceUrl && dir === downloadsDir) {
+          // A versão baixada fica sem uso: apaga, levando a capa para o nome do novo arquivo.
+          const sidecar = coverSidecar(entry.path)
+          const newSidecar = coverSidecar(candidate.path)
+          if (existsSync(sidecar) && !existsSync(newSidecar)) await rename(sidecar, newSidecar)
+          await rm(entry.path, { force: true })
+          await rm(sidecar, { force: true })
+        }
+        return library.get(newHash)
+      }
+      return null
+    },
+
     async revealTrack(hash) {
       const entry = library.get(hash)
       if (!entry) throw new Error('faixa não está na biblioteca')
@@ -176,7 +283,7 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
     async resolveTracks(tracks) {
       return Promise.all(
         tracks.map(async ({ hash, path }) => {
-          const entry = library.get(hash)
+          const entry = library.get(hash) ?? library.replacement(hash)
           if (entry && !entry.missing) return entry
           if (existsSync(path)) {
             try {

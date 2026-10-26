@@ -355,6 +355,23 @@ button.danger {
   padding: 10px 12px;
   border-top: 1px solid var(--line);
 }
+.editor-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+}
+.editor-button img,
+.editor-button svg {
+  width: 22px;
+  height: 22px;
+}
+.editor-button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
 .workspace {
   display: flex;
   flex-direction: column;

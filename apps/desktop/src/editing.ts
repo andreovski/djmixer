@@ -338,6 +338,22 @@ export function applyGridEdit(
   }
 }
 
+/**
+ * Aponta as faixas do projeto com `oldHash` para o arquivo editado num editor externo. O id da
+ * faixa fica o mesmo (os canais apontam para ele), assim como a grade e as cues.
+ */
+export function replaceTrackFile(project: Project, oldHash: string, entry: LibraryEntry): Project {
+  if (!project.tracks.some((track) => track.hash === oldHash)) return project
+  return {
+    ...project,
+    tracks: project.tracks.map((track) =>
+      track.hash === oldHash
+        ? { ...track, hash: entry.hash, path: entry.path, durationSeconds: entry.durationSeconds }
+        : track,
+    ),
+  }
+}
+
 /** Grupos: renomear, mover na ordem do set e remover. */
 export function moveGroup(project: Project, groupId: string, delta: -1 | 1): Project {
   const index = project.groups.findIndex((group) => group.id === groupId)

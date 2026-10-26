@@ -8,6 +8,7 @@ import {
   createGroup,
   lanePoints,
   moveClip,
+  replaceTrackFile,
   snapBeat,
   trimClip,
   urlTracksInSet,
@@ -124,5 +125,23 @@ describe('faixas baixadas de URL', () => {
     }
     expect(group?.channels).toHaveLength(2)
     expect(urlTracksInSet(onlyFirst, library)).toEqual([])
+  })
+})
+
+describe('replaceTrackFile', () => {
+  it('troca hash, caminho e duração e mantém id, grade e cues', () => {
+    const [empty, group] = createGroup(createProject(), 'A')
+    const { project } = addTrackToGroup(empty, group.id, entry('velha', 124, 300))
+    const edited = { ...entry('nova', 124, 301), path: '/m/velha (RX).wav' }
+    const next = replaceTrackFile(project, 'velha', edited)
+    const [before] = project.tracks
+    const [after] = next.tracks
+    expect(after).toEqual({
+      ...before,
+      hash: 'nova',
+      path: '/m/velha (RX).wav',
+      durationSeconds: 301,
+    })
+    expect(replaceTrackFile(project, 'outra', edited)).toBe(project)
   })
 })

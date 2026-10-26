@@ -51,6 +51,12 @@ export class Library {
         hashes TEXT NOT NULL,
         created_at INTEGER NOT NULL
       );
+      -- Faixas trocadas pela versão editada num editor externo (ver docs/decisoes/0017): projetos
+      -- antigos guardam o hash anterior e o acham por aqui.
+      CREATE TABLE IF NOT EXISTS replaced (
+        old_hash TEXT PRIMARY KEY,
+        new_hash TEXT NOT NULL
+      );
     `)
     // Bibliotecas criadas antes do "Importar de URL" não têm a coluna da origem.
     const columns = this.db.prepare('PRAGMA table_info(tracks)').all() as { name: string }[]
@@ -124,6 +130,52 @@ export class Library {
 
   deletePlaylist(id: string): void {
     this.db.prepare('DELETE FROM playlists WHERE id = ?').run(id)
+  }
+
+  /**
+   * Troca a faixa pela versão editada: o novo arquivo herda título, artista, análise, correções,
+   * picos, origem e playlists da anterior, que sai da biblioteca.
+   */
+  replace(oldHash: string, track: Pick<NewTrack, 'hash' | 'path' | 'durationSeconds'>): void {
+    if (oldHash === track.hash) return
+    this.db.exec('BEGIN')
+    try {
+      if (this.get(track.hash)) {
+        this.setPath(track.hash, track.path)
+      } else {
+        this.db
+          .prepare(
+            `INSERT INTO tracks (hash, path, title, artist, duration, analysis, edits, peaks,
+               source_url, imported_at)
+             SELECT ?, ?, title, artist, ?, analysis, edits, peaks, source_url, imported_at
+             FROM tracks WHERE hash = ?`,
+          )
+          .run(track.hash, track.path, track.durationSeconds, oldHash)
+      }
+      this.db.prepare('DELETE FROM tracks WHERE hash = ?').run(oldHash)
+      for (const playlist of this.playlists()) {
+        if (!playlist.hashes.includes(oldHash)) continue
+        const hashes = playlist.hashes.map((h) => (h === oldHash ? track.hash : h))
+        this.savePlaylist({ ...playlist, hashes: [...new Set(hashes)] })
+      }
+      this.db
+        .prepare('UPDATE replaced SET new_hash = ? WHERE new_hash = ?')
+        .run(track.hash, oldHash)
+      this.db
+        .prepare('INSERT OR REPLACE INTO replaced (old_hash, new_hash) VALUES (?, ?)')
+        .run(oldHash, track.hash)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  /** Faixa que substituiu a de `hash` (ver `replace`), ou null. */
+  replacement(hash: string): LibraryEntry | null {
+    const row = this.db.prepare('SELECT new_hash FROM replaced WHERE old_hash = ?').get(hash) as
+      { new_hash: string } | undefined
+    return row ? this.get(row.new_hash) : null
   }
 
   setPath(hash: string, path: string): void {

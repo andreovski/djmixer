@@ -12,12 +12,15 @@ import {
 } from '../../host/api.ts'
 import {
   addToGroup,
+  chooseEditor,
   createPlaylist,
+  editorName,
   deletePlaylist,
   importFromUrl,
   importTracks,
   loadCover,
   moveToPlaylist,
+  openInEditor,
   reanalyze,
   removeFromLibrary,
   renamePlaylist,
@@ -136,6 +139,18 @@ export function LibraryPanel() {
   // Pasta (id) ou raiz ('') sob a faixa arrastada.
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   const touch = useMedia(TOUCH_QUERY)
+  const replaced = useApp((s) => s.replaced)
+
+  // A faixa selecionada foi trocada pela versão editada: a seleção segue o novo hash.
+  useEffect(() => {
+    if (replaced) {
+      setSelected((current) =>
+        current?.kind === 'track' && current.hash === replaced.from
+          ? { kind: 'track', hash: replaced.to }
+          : current,
+      )
+    }
+  }, [replaced])
 
   const tree = useMemo(() => libraryTree(library, playlists, filter), [library, playlists, filter])
   const searching = filter.trim() !== ''
@@ -449,6 +464,7 @@ export function LibraryPanel() {
           {host.revealTrack && (
             <button onClick={() => void revealTrack(selected.hash)}>Mostrar no Finder</button>
           )}
+          {host.openInEditor && <EditorButton hash={selected.hash} />}
           <button onClick={() => reanalyze(selected.hash)}>Analisar de novo</button>
           <button
             onClick={() => void removeFromLibrary(selected.hash).then(() => select(null))}
@@ -480,5 +496,38 @@ export function LibraryPanel() {
         </div>
       )}
     </aside>
+  )
+}
+
+/**
+ * Abre a faixa no editor externo (iZotope RX, por exemplo), mostrando o ícone do próprio app. O
+ * botão direito troca o editor.
+ */
+function EditorButton({ hash }: { hash: string }) {
+  const editor = useApp((s) => s.editorApp)
+  const icon = useApp((s) => s.editorIcon)
+  const name = editor ? editorName(editor) : null
+  const tip = name
+    ? `Abrir no ${name} (botão direito: trocar o editor)`
+    : 'Abrir num editor de áudio (iZotope RX, por exemplo)'
+  return (
+    <button
+      className="editor-button"
+      title={tip}
+      aria-label={tip}
+      onClick={() => void openInEditor(hash)}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        void chooseEditor()
+      }}
+    >
+      {icon ? (
+        <img src={icon} alt="" />
+      ) : (
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M2 10h2M6 6v8M9 3v14M12 7v6M15 5v10M18 9v2" />
+        </svg>
+      )}
+    </button>
   )
 }

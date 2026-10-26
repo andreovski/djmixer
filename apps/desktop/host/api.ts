@@ -140,6 +140,21 @@ export interface HostApi {
   /** Situação do yt-dlp (ver host/ytdlp.ts). Só existe no Electron e no servidor de desenvolvimento. */
   ytDlpStatus?(): Promise<YtDlpStatus>
   listLibrary(): Promise<LibraryEntry[]>
+  /** Pede ao usuário o aplicativo editor de áudio (iZotope RX, por exemplo); null se cancelou. */
+  pickEditor?(): Promise<string | null>
+  /** Ícone do aplicativo editor, em PNG, lido do próprio app instalado; null se não há. */
+  editorIcon?(editor: string): Promise<Uint8Array | null>
+  /**
+   * Abre o arquivo da faixa no editor escolhido (ver docs/decisoes/0017). Devolve o instante da
+   * abertura, pelo relógio do host, para `checkEdited`.
+   */
+  openInEditor?(hash: string, editor: string): Promise<number>
+  /**
+   * Procura uma versão da faixa salva depois de `since`: o mesmo arquivo regravado ou um ao lado
+   * com o mesmo começo de nome (o "Salvar como" do editor). Se achar, troca a faixa na biblioteca,
+   * mantendo análise, correções e playlists, e devolve a nova entrada; senão, null.
+   */
+  checkEdited?(hash: string, since: number): Promise<LibraryEntry | null>
   /** Abre a pasta do arquivo da faixa no Finder (ou no gerenciador de arquivos), com ele marcado. */
   revealTrack?(hash: string): Promise<void>
   /**

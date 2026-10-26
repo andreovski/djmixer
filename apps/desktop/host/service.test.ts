@@ -29,6 +29,8 @@ const dialogs: Dialogs = {
   pickExportPath: async () => answers.shift() as string,
   locateTrack: async () => answers.shift() as string,
   reveal: async (path) => void answers.push(`revelado:${path}`),
+  pickApplication: async () => answers.shift() as string,
+  appIcon: async () => null,
 }
 const service = createHostService(join(dir, 'dados'), dialogs)
 afterAll(() => service.close())
@@ -132,6 +134,60 @@ printf '{"filepath": "%s", "webpage_url": "https://soundcloud.com/a/b", "format_
       }
     },
   )
+})
+
+describe.skipIf(!hasFfmpeg || process.platform === 'win32')('editor externo', () => {
+  it('abre no editor e troca a faixa pela versão salva, mantendo análise e playlists', async () => {
+    const path = join(dir, 'editar.wav')
+    tone(path, 5)
+    const [entry] = (await service.importFiles([path])).entries
+    const hash = entry?.hash ?? ''
+    const analysis = {
+      grid: { bpm: 124, firstBeatSeconds: 0.1 },
+      key: null,
+      confidence: 1,
+      analyzedAt: 1,
+    }
+    await service.saveAnalysis(hash, analysis, new Uint8Array([1, 2, 3]))
+    await service.saveEdits(hash, { grid: null, cues: [{ id: 'c', beat: 4, label: 'drop' }] })
+    await service.savePlaylist({ id: 'rx', name: 'RX', hashes: [hash] })
+
+    // Editor de mentira: anota o arquivo que recebeu.
+    const marker = join(dir, 'editor-abriu.txt')
+    const editor = join(dir, 'editor')
+    writeFileSync(editor, `#!/bin/sh\necho "$1" > '${marker}'\n`)
+    chmodSync(editor, 0o755)
+    const since = await service.openInEditor(hash, editor)
+    for (let i = 0; i < 50 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 20))
+    expect(readFileSync(marker, 'utf8').trim()).toBe(path)
+    expect(await service.checkEdited(hash, since)).toBeNull()
+
+    // "Salvar como" ao lado, com outro nome.
+    const savedAs = join(dir, 'editar (RX).wav')
+    tone(savedAs, 6)
+    const edited = await service.checkEdited(hash, since)
+    expect(edited).toMatchObject({ path: savedAs, title: 'editar', analysis })
+    expect(edited?.hash).not.toBe(hash)
+    expect(edited?.edits.cues).toHaveLength(1)
+    expect(await service.getPeaks(edited?.hash ?? '')).toEqual(new Uint8Array([1, 2, 3]))
+    expect((await service.listPlaylists()).find((p) => p.id === 'rx')?.hashes).toEqual([
+      edited?.hash,
+    ])
+    expect((await service.listLibrary()).some((e) => e.hash === hash)).toBe(false)
+    // Um projeto antigo, com o hash anterior, acha a versão nova.
+    const [resolved] = await service.resolveTracks([{ hash, path }])
+    expect(resolved?.hash).toBe(edited?.hash)
+
+    // Salvar por cima do mesmo arquivo também troca.
+    const again = Date.now() - 1
+    tone(savedAs, 7)
+    const overwritten = await service.checkEdited(edited?.hash ?? '', again)
+    expect(overwritten?.path).toBe(savedAs)
+    expect(overwritten?.hash).not.toBe(edited?.hash)
+    const [chained] = await service.resolveTracks([{ hash, path }])
+    expect(chained?.hash).toBe(overwritten?.hash)
+    await service.deletePlaylist('rx')
+  })
 })
 
 describe.skipIf(!hasFfmpeg)('capas', () => {

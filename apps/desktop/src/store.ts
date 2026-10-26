@@ -47,6 +47,12 @@ export interface AppState {
   playlists: Playlist[]
   /** Faixas do projeto aberto que não foram achadas no disco (por hash). */
   missing: string[]
+  /** Editor de áudio externo escolhido (caminho do aplicativo), ver src/actions.ts. */
+  editorApp: string | null
+  /** URL (blob:) do ícone do editor; null enquanto não carregou ou se não há. */
+  editorIcon: string | null
+  /** Última faixa trocada pela versão editada, para a seleção seguir o novo hash. */
+  replaced: { from: string; to: string } | null
 
   groupId: string | null
   channelId: string | null
@@ -76,6 +82,9 @@ export interface AppState {
 
 const HISTORY_LIMIT = 200
 
+/** Onde fica guardado o editor externo escolhido. */
+export const EDITOR_KEY = 'djmixer.editorApp'
+
 export const useApp = create<AppState>((set, get) => ({
   project: createProject(),
   projectPath: null,
@@ -88,6 +97,9 @@ export const useApp = create<AppState>((set, get) => ({
   analysis: {},
   peaks: {},
   covers: {},
+  editorApp: readEditor(),
+  editorIcon: null,
+  replaced: null,
   playlists: [],
   missing: [],
 
@@ -201,4 +213,12 @@ export function updateGroup(
 ): Project {
   const group = project.groups.find((candidate) => candidate.id === groupId)
   return group ? replaceGroup(project, recipe(group)) : project
+}
+
+function readEditor(): string | null {
+  try {
+    return localStorage.getItem(EDITOR_KEY)
+  } catch {
+    return null
+  }
 }

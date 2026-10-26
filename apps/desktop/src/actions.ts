@@ -14,12 +14,13 @@ import {
   applyGridEdit,
   createGroup,
   pruneTracks,
+  replaceTrackFile,
   urlTracksInSet,
 } from './editing.ts'
 import { host } from './host.ts'
 import { moveTrack, uniqueName } from './playlists.ts'
 import { downloadSummary } from './quality.ts'
-import { currentGroup, useApp } from './store.ts'
+import { currentGroup, EDITOR_KEY, useApp } from './store.ts'
 import type { AnalysisRequest, AnalysisResponse } from './workers/analysis.worker.ts'
 
 const state = () => useApp.getState()
@@ -177,6 +178,101 @@ export async function revealTrack(hash: string): Promise<void> {
   } catch (error) {
     state().notify('error', `Não foi possível mostrar o arquivo: ${errorText(error)}`)
   }
+}
+
+// Editor externo (docs/decisoes/0017): o app guarda qual é, abre a faixa nele e, quando a janela
+// volta ao foco, procura a versão salva e troca a faixa por ela.
+/** Faixas abertas no editor, com o instante (do host) a partir do qual procurar a versão nova. */
+const inEditor = new Map<string, number>()
+
+/** Nome do editor para os botões: "iZotope RX 11 Audio Editor" de ".../iZotope RX 11 Audio Editor.app". */
+export function editorName(path: string): string {
+  return (path.split(/[/\\]/).pop() ?? path).replace(/\.(app|exe)$/i, '')
+}
+
+/** Pede o editor ao usuário e guarda; devolve null se cancelou. */
+export async function chooseEditor(): Promise<string | null> {
+  const editor = (await host.pickEditor?.()) ?? null
+  if (!editor) return null
+  try {
+    localStorage.setItem(EDITOR_KEY, editor)
+  } catch {
+    // Sem armazenamento: pergunta de novo da próxima vez.
+  }
+  state().set({ editorApp: editor })
+  void loadEditorIcon()
+  return editor
+}
+
+/** Lê o ícone do editor escolhido no próprio aplicativo instalado. */
+export async function loadEditorIcon(): Promise<void> {
+  const { editorApp, editorIcon } = state()
+  if (!editorApp || !host.editorIcon) return
+  const bytes = await host.editorIcon(editorApp).catch(() => null)
+  if (editorIcon) URL.revokeObjectURL(editorIcon)
+  state().set({
+    editorIcon: bytes
+      ? URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/png' }))
+      : null,
+  })
+}
+
+export async function openInEditor(hash: string): Promise<void> {
+  if (!host.openInEditor) return
+  try {
+    const editor = state().editorApp ?? (await chooseEditor())
+    if (!editor) return
+    inEditor.set(hash, await host.openInEditor(hash, editor))
+    state().notify(
+      'info',
+      `Aberta no ${editorName(editor)}. Salve por cima ou com "Salvar como" na mesma pasta; ao voltar para cá, a faixa é trocada pela versão editada.`,
+    )
+  } catch (error) {
+    state().notify('error', `Não foi possível abrir no editor: ${errorText(error)}`)
+  }
+}
+
+/** Procura versões salvas das faixas abertas no editor (chamada quando a janela ganha foco). */
+export async function checkEditedTracks(): Promise<void> {
+  if (!host.checkEdited) return
+  for (const [hash, since] of [...inEditor]) {
+    try {
+      const checkedAt = Date.now()
+      const entry = await host.checkEdited(hash, since)
+      if (!entry) continue
+      inEditor.delete(hash)
+      // Continua de olho: o usuário pode salvar de novo. O instante vem do relógio da interface,
+      // que é o mesmo do host no Electron e no servidor de desenvolvimento.
+      inEditor.set(entry.hash, checkedAt)
+      replaceInState(hash, entry)
+      state().notify('info', `"${entry.title}" trocada pela versão editada.`)
+    } catch (error) {
+      state().notify('error', `Não foi possível trocar a faixa editada: ${errorText(error)}`)
+    }
+  }
+}
+
+function replaceInState(oldHash: string, entry: LibraryEntry) {
+  const { library, analysis, peaks, covers, gridEditor, missing } = state()
+  const without = <T>(record: Record<string, T>) =>
+    Object.fromEntries(Object.entries(record).filter(([key]) => key !== oldHash))
+  const oldPeaks = peaks[oldHash]
+  state().set({
+    library: { ...without(library), [entry.hash]: entry },
+    analysis: { ...without(analysis), [entry.hash]: analysis[oldHash] ?? { status: 'done' } },
+    peaks: oldPeaks ? { ...without(peaks), [entry.hash]: oldPeaks } : peaks,
+    covers: without(covers),
+    gridEditor: gridEditor === oldHash ? entry.hash : gridEditor,
+    missing: missing.filter((hash) => hash !== oldHash),
+    replaced: { from: oldHash, to: entry.hash },
+  })
+  coverRequests.delete(oldHash)
+  if (state().project.tracks.some((track) => track.hash === oldHash)) {
+    state().edit((project) => replaceTrackFile(project, oldHash, entry))
+  }
+  // O host já trocou o hash nas playlists guardadas.
+  void loadPlaylists()
+  if (!entry.analysis && !entry.edits.grid) queueAnalysis([entry])
 }
 
 // Capas: pedidas ao host uma vez por faixa e guardadas como URL blob.
