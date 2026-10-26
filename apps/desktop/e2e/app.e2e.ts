@@ -111,7 +111,7 @@ test('importa, monta, ensaia, salva e exporta um set', async () => {
   await page.getByRole('button', { name: 'Novo', exact: true }).click()
   await expect(page.getByTestId('group-tab')).toHaveCount(0)
   await answerDialogs(app, [projectPath], '')
-  await page.getByRole('button', { name: 'Abrir' }).click()
+  await page.getByRole('button', { name: 'Abrir', exact: true }).click()
   await expect(page.getByTestId('group-tab')).toHaveCount(1)
 
   expect(errors).toEqual([])

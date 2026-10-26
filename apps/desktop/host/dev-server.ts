@@ -24,6 +24,8 @@ const dialogs: Dialogs = {
   pickProjectToSave: async () => next<string | null>(null),
   pickExportPath: async () => next<string | null>(null),
   locateTrack: async () => next<string | null>(null),
+  pickApplication: async () => next<string | null>(null),
+  appIcon: async () => null,
   // No servidor de desenvolvimento, abre o gerenciador de arquivos da máquina que roda o servidor.
   async reveal(path) {
     if (process.platform === 'darwin') spawn('open', ['-R', path], { stdio: 'ignore' })

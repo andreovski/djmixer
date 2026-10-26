@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect } from 'react'
-import { loadLibrary, locateTrack, saveProject } from '../actions.ts'
+import {
+  checkEditedTracks,
+  loadEditorIcon,
+  loadLibrary,
+  locateTrack,
+  saveProject,
+} from '../actions.ts'
 import { stop } from '../audio.ts'
 import { host } from '../host.ts'
 import { currentGroup, useApp } from '../store.ts'
@@ -21,6 +27,11 @@ export function App() {
 
   useEffect(() => {
     void loadLibrary()
+    void loadEditorIcon()
+    // Ao voltar do editor externo, troca as faixas que foram salvas lá.
+    const onFocus = () => void checkEditedTracks()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
   }, [])
 
   useEffect(() => {

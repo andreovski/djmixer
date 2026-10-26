@@ -175,9 +175,20 @@ label {
   gap: 6px;
   margin: 0 12px 8px;
 }
+.inline-form {
+  flex-wrap: wrap;
+}
 .inline-form input {
   flex: 1;
   min-width: 0;
+}
+.url-login {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .library-folder {
   display: flex;
@@ -351,6 +362,23 @@ button.danger {
   gap: 6px;
   padding: 10px 12px;
   border-top: 1px solid var(--line);
+}
+.editor-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+}
+.editor-button img,
+.editor-button svg {
+  width: 22px;
+  height: 22px;
+}
+.editor-button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
 }
 .workspace {
   display: flex;
