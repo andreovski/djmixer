@@ -2,11 +2,13 @@
 // Host sem Electron: importar, decodificar com ffmpeg, achar faixa movida pelo hash, salvar
 // projeto e escrever o WAV em partes. Pula o que depende do ffmpeg se ele não estiver instalado.
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { encodeWav, wavHeader } from '../../../packages/engine/src/wav.ts'
+import { DatabaseSync } from 'node:sqlite'
+import { Library } from './library.ts'
 import { createHostService, type Dialogs } from './service.ts'
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0
@@ -46,9 +48,58 @@ describe.skipIf(!hasFfmpeg)('host com ffmpeg', () => {
     const [resolved] = await service.resolveTracks([{ hash: entry?.hash ?? '', path: moved }])
     expect(resolved?.path).toBe(moved)
   })
+
+  // O yt-dlp de mentira é um script sh, que o Windows não roda.
+  it.skipIf(process.platform === 'win32')(
+    'importa de URL pelo yt-dlp e guarda a página de origem',
+    async () => {
+      // yt-dlp de mentira: copia um WAV para o destino e imprime o JSON pedido em --print.
+      const source = join(dir, 'baixada.wav')
+      tone(source, 1)
+      const fake = join(dir, 'yt-dlp')
+      writeFileSync(
+        fake,
+        `#!/bin/sh
+while [ "$1" != "--output" ]; do shift; done
+target=$(echo "$2" | sed 's/%(extractor)s-%(id)s.%(ext)s/soundcloud-42.wav/')
+cp '${source}' "$target"
+echo "[download] Destination: $target"
+printf '{"filepath": "%s", "webpage_url": "https://soundcloud.com/a/b"}\n' "$target"
+`,
+      )
+      chmodSync(fake, 0o755)
+      process.env.DJMIXER_YTDLP = fake
+      try {
+        const { entries, errors } = await service.importFromUrl('https://soundcloud.com/a/b')
+        expect(errors).toEqual([])
+        expect(entries[0]).toMatchObject({
+          title: 'soundcloud-42',
+          sourceUrl: 'https://soundcloud.com/a/b',
+        })
+        const listed = (await service.listLibrary()).find((e) => e.hash === entries[0]?.hash)
+        expect(listed?.sourceUrl).toBe('https://soundcloud.com/a/b')
+        await expect(service.importFromUrl('soundcloud.com/a/b')).rejects.toThrow('https://')
+      } finally {
+        delete process.env.DJMIXER_YTDLP
+      }
+    },
+  )
 })
 
 describe('host', () => {
+  it('acrescenta a coluna da origem numa biblioteca antiga', () => {
+    const file = join(dir, 'antiga.sqlite')
+    const old = new DatabaseSync(file)
+    old.exec(`CREATE TABLE tracks (hash TEXT PRIMARY KEY, path TEXT NOT NULL, title TEXT NOT NULL,
+      artist TEXT NOT NULL, duration REAL NOT NULL, analysis TEXT, edits TEXT, peaks BLOB,
+      imported_at INTEGER NOT NULL);
+      INSERT INTO tracks VALUES ('h', '/x.mp3', 'X', '', 1, NULL, NULL, NULL, 0);`)
+    old.close()
+    const library = new Library(file)
+    expect(library.get('h')?.sourceUrl).toBeUndefined()
+    library.close()
+  })
+
   it('recusa chaves de mídia com caminho', async () => {
     expect(await service.mediaFile('stretched', '../../etc/passwd')).toBeNull()
   })

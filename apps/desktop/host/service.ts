@@ -8,6 +8,7 @@ import { basename, extname, join } from 'node:path'
 import type { ExportResult, ExportTarget, HostApi, LibraryEntry } from './api.ts'
 import { Library } from './library.ts'
 import { decodeToCache, hashFile, probe } from './media.ts'
+import { downloadAudio } from './url-import.ts'
 
 export interface Dialogs {
   pickAudioFiles(): Promise<string[]>
@@ -17,7 +18,8 @@ export interface Dialogs {
   locateTrack(entry: LibraryEntry | null): Promise<string | null>
 }
 
-export type HostService = Omit<HostApi, 'kind' | 'mediaUrl'> & {
+export type HostService = Omit<HostApi, 'kind' | 'mediaUrl' | 'importFromUrl'> & {
+  importFromUrl: NonNullable<HostApi['importFromUrl']>
   /** Caminho do arquivo a servir para `mediaUrl`, decodificando se preciso; null se não existe. */
   mediaFile(kind: string, key: string): Promise<string | null>
   close(): void
@@ -30,18 +32,23 @@ const SAFE_KEY = /^[A-Za-z0-9._-]{1,200}$/
 export function createHostService(dataDir: string, dialogs: Dialogs): HostService {
   const decodedDir = join(dataDir, 'cache', 'decoded')
   const stretchedDir = join(dataDir, 'cache', 'stretched')
-  for (const dir of [decodedDir, stretchedDir]) mkdirSync(dir, { recursive: true })
+  const downloadsDir = join(dataDir, 'downloads')
+  for (const dir of [decodedDir, stretchedDir, downloadsDir]) mkdirSync(dir, { recursive: true })
   const library = new Library(join(dataDir, 'library.sqlite'))
   const exports = new Map<string, { handle: FileHandle; path: string; bytes: number }>()
 
-  const register = async (path: string, knownHash?: string): Promise<LibraryEntry> => {
+  const register = async (
+    path: string,
+    knownHash?: string,
+    sourceUrl?: string,
+  ): Promise<LibraryEntry> => {
     const hash = knownHash ?? (await hashFile(path))
     const existing = library.get(hash)
     if (existing) {
       if (existing.path !== path) library.setPath(hash, path)
       return { ...existing, path, missing: false }
     }
-    return library.upsert({ hash, path, ...(await probe(path)) })
+    return library.upsert({ hash, path, ...(await probe(path)), ...(sourceUrl && { sourceUrl }) })
   }
 
   return {
@@ -58,6 +65,22 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
             `${basename(path)}: ${error instanceof Error ? error.message : String(error)}`,
           )
         }
+      }
+      return { entries, errors }
+    },
+
+    async importFromUrl(url) {
+      const entries: LibraryEntry[] = []
+      const errors: string[] = []
+      for (const file of await downloadAudio(url.trim(), downloadsDir)) {
+        try {
+          entries.push(await register(file.path, undefined, file.pageUrl))
+        } catch (error) {
+          errors.push(`${file.pageUrl}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+      if (entries.length === 0 && errors.length === 0) {
+        errors.push('nenhum áudio encontrado nesse endereço')
       }
       return { entries, errors }
     },

@@ -58,7 +58,8 @@ function createWebHost(): HostApi {
       if (property === 'mediaUrl') {
         return (kind: string, key: string) => `/media/${kind}/${encodeURIComponent(key)}`
       }
-      if (property === 'then') return undefined
+      // readMedia é só da versão web; aqui o áudio vem por mediaUrl.
+      if (property === 'then' || property === 'readMedia') return undefined
       return async (...args: unknown[]) => {
         await answerDialog(property as keyof HostApi, args)
         return call(property, args)

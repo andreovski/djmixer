@@ -161,6 +161,27 @@ label {
 .filter {
   margin: 0 12px 8px;
 }
+.panel-buttons {
+  display: flex;
+  gap: 6px;
+}
+.url-import {
+  display: flex;
+  gap: 6px;
+  margin: 0 12px 8px;
+}
+.url-import input {
+  flex: 1;
+  min-width: 0;
+}
+.li-source {
+  margin-right: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
 .library-list {
   flex: 1;
   overflow-y: auto;

@@ -365,3 +365,16 @@ export function formatBarBeat(beat: Beat): string {
   const whole = Math.floor(beat + 1e-6)
   return `${Math.floor(whole / 4) + 1}.${(whole % 4) + 1}`
 }
+
+/**
+ * Títulos das faixas do set baixadas pelo "Importar de URL": elas ficam só dentro do app e
+ * impedem o export (docs/decisoes/0013).
+ */
+export function urlTracksInSet(project: Project, library: Record<string, LibraryEntry>): string[] {
+  const used = new Set(
+    project.groups.flatMap((group) => group.channels.map((channel) => channel.trackId)),
+  )
+  return project.tracks
+    .filter((track) => used.has(track.id) && library[track.hash]?.sourceUrl)
+    .map((track) => track.title)
+}

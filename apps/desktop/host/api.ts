@@ -46,6 +46,11 @@ export interface LibraryEntry {
   edits: UserEdits
   /** O arquivo não está mais no caminho guardado. */
   missing: boolean
+  /**
+   * Página de onde a faixa foi baixada pelo "Importar de URL" (ver docs/decisoes/0013). Faixas
+   * assim não entram no export.
+   */
+  sourceUrl?: string
 }
 
 export interface ExportTarget {
@@ -66,6 +71,11 @@ export interface HostApi {
   pickAudioFiles(): Promise<string[]>
   /** Calcula o hash, lê título e artista e registra na biblioteca. Não analisa. */
   importFiles(paths: string[]): Promise<{ entries: LibraryEntry[]; errors: string[] }>
+  /**
+   * Baixa o áudio de uma página (faixa ou playlist do SoundCloud, por exemplo) com o yt-dlp e
+   * registra na biblioteca. Só existe no Electron e no servidor de desenvolvimento.
+   */
+  importFromUrl?(url: string): Promise<{ entries: LibraryEntry[]; errors: string[] }>
   listLibrary(): Promise<LibraryEntry[]>
   removeFromLibrary(hash: string): Promise<void>
   saveAnalysis(hash: string, analysis: TrackAnalysis, peaks: Uint8Array): Promise<void>

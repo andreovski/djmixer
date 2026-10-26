@@ -13,6 +13,7 @@ interface Row {
   duration: number
   analysis: string | null
   edits: string | null
+  source_url: string | null
 }
 
 export interface NewTrack {
@@ -21,7 +22,10 @@ export interface NewTrack {
   title: string
   artist: string
   durationSeconds: number
+  sourceUrl?: string
 }
+
+const COLUMNS = 'hash, path, title, artist, duration, analysis, edits, source_url'
 
 export class Library {
   private readonly db: DatabaseSync
@@ -42,6 +46,11 @@ export class Library {
         imported_at INTEGER NOT NULL
       );
     `)
+    // Bibliotecas criadas antes do "Importar de URL" não têm a coluna da origem.
+    const columns = this.db.prepare('PRAGMA table_info(tracks)').all() as { name: string }[]
+    if (!columns.some((column) => column.name === 'source_url')) {
+      this.db.exec('ALTER TABLE tracks ADD COLUMN source_url TEXT')
+    }
   }
 
   close(): void {
@@ -52,28 +61,31 @@ export class Library {
   upsert(track: NewTrack): LibraryEntry {
     this.db
       .prepare(
-        `INSERT INTO tracks (hash, path, title, artist, duration, imported_at)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO tracks (hash, path, title, artist, duration, source_url, imported_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(hash) DO UPDATE SET path = excluded.path`,
       )
-      .run(track.hash, track.path, track.title, track.artist, track.durationSeconds, Date.now())
+      .run(
+        track.hash,
+        track.path,
+        track.title,
+        track.artist,
+        track.durationSeconds,
+        track.sourceUrl ?? null,
+        Date.now(),
+      )
     return this.get(track.hash) as LibraryEntry
   }
 
   get(hash: string): LibraryEntry | null {
-    const row = this.db
-      .prepare(
-        'SELECT hash, path, title, artist, duration, analysis, edits FROM tracks WHERE hash = ?',
-      )
-      .get(hash) as Row | undefined
+    const row = this.db.prepare(`SELECT ${COLUMNS} FROM tracks WHERE hash = ?`).get(hash) as
+      Row | undefined
     return row ? toEntry(row) : null
   }
 
   list(): LibraryEntry[] {
     const rows = this.db
-      .prepare(
-        'SELECT hash, path, title, artist, duration, analysis, edits FROM tracks ORDER BY imported_at, title',
-      )
+      .prepare(`SELECT ${COLUMNS} FROM tracks ORDER BY imported_at, title`)
       .all() as unknown as Row[]
     return rows.map(toEntry)
   }
@@ -113,5 +125,6 @@ function toEntry(row: Row): LibraryEntry {
     analysis: row.analysis ? (JSON.parse(row.analysis) as TrackAnalysis) : null,
     edits: row.edits ? (JSON.parse(row.edits) as UserEdits) : { grid: null, cues: [] },
     missing: !existsSync(row.path),
+    ...(row.source_url ? { sourceUrl: row.source_url } : {}),
   }
 }

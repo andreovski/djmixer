@@ -14,8 +14,11 @@ export const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'aif', 'aif
 // Apps abertos pelo Finder não herdam o PATH do terminal; o Homebrew instala nestes lugares.
 const EXTRA_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 
-function findTool(name: 'ffmpeg' | 'ffprobe'): string {
-  const override = process.env.DJMIXER_FFMPEG
+type Tool = 'ffmpeg' | 'ffprobe' | 'yt-dlp'
+
+export function findTool(name: Tool): string {
+  if (name === 'yt-dlp' && process.env.DJMIXER_YTDLP) return process.env.DJMIXER_YTDLP
+  const override = name === 'yt-dlp' ? undefined : process.env.DJMIXER_FFMPEG
   if (override) {
     return name === 'ffmpeg'
       ? override
@@ -32,7 +35,13 @@ function findTool(name: 'ffmpeg' | 'ffprobe'): string {
   return exe
 }
 
-function run(tool: 'ffmpeg' | 'ffprobe', args: string[]): Promise<string> {
+const INSTALL_HINT: Record<Tool, string> = {
+  ffmpeg: 'Instale o ffmpeg (brew install ffmpeg) ou defina DJMIXER_FFMPEG.',
+  ffprobe: 'Instale o ffmpeg (brew install ffmpeg) ou defina DJMIXER_FFMPEG.',
+  'yt-dlp': 'Instale o yt-dlp (brew install yt-dlp) ou defina DJMIXER_YTDLP.',
+}
+
+export function run(tool: Tool, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(findTool(tool), args, { stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
@@ -42,9 +51,7 @@ function run(tool: 'ffmpeg' | 'ffprobe', args: string[]): Promise<string> {
     child.on('error', (error: NodeJS.ErrnoException) =>
       reject(
         error.code === 'ENOENT'
-          ? new Error(
-              `${tool} não encontrado. Instale o ffmpeg (brew install ffmpeg) ou defina DJMIXER_FFMPEG.`,
-            )
+          ? new Error(`${tool} não encontrado. ${INSTALL_HINT[tool]}`)
           : error,
       ),
     )
