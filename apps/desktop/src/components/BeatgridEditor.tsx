@@ -4,9 +4,17 @@
 // confere-se de ouvido com o metrônomo. A correção vale para a biblioteca e para o projeto e
 // nunca é sobrescrita por uma nova análise.
 import { newId, type Beatgrid, type Cue } from '@djmixer/shared'
-import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type WheelEvent,
+} from 'react'
 import { saveGridEdit } from '../actions.ts'
 import { errorText, previewSeconds, startPreview, stopPreview } from '../audio.ts'
+import { formatBpm, MAX_BPM, MIN_BPM, parseBpm, roundBpm, stepBpm } from '../bpm.ts'
 import { entryGrid } from '../editing.ts'
 import { TOUCH_QUERY, useMedia } from '../responsive.ts'
 import { useApp } from '../store.ts'
@@ -162,7 +170,7 @@ export function BeatgridEditor({ hash }: { hash: string }) {
     })
   }
   const setBpm = (bpm: number) => {
-    if (bpm >= 40 && bpm <= 250) setGrid((g) => ({ ...g, bpm: Math.round(bpm * 1000) / 1000 }))
+    if (bpm >= MIN_BPM && bpm <= MAX_BPM) setGrid((g) => ({ ...g, bpm: roundBpm(bpm) }))
   }
 
   const pinchSpan = () => {
@@ -336,18 +344,13 @@ export function BeatgridEditor({ hash }: { hash: string }) {
             : 'Arraste a waveform para mover a grade · clique posiciona o cursor · Ctrl/⌘+roda aproxima'}
         </p>
         <div className="grid-controls">
-          <label>
-            BPM
-            <input
-              type="number"
-              step={0.01}
-              value={grid.bpm}
-              data-testid="grid-bpm"
-              onChange={(e) => setBpm(Number(e.target.value))}
-            />
-          </label>
-          <button onClick={() => setBpm(grid.bpm - 0.01)}>−0,01</button>
-          <button onClick={() => setBpm(grid.bpm + 0.01)}>+0,01</button>
+          <BpmField bpm={grid.bpm} onChange={setBpm} />
+          <button onClick={() => setBpm(stepBpm(grid.bpm, -1))} title="Diminui 1 BPM">
+            −1
+          </button>
+          <button onClick={() => setBpm(stepBpm(grid.bpm, 1))} title="Aumenta 1 BPM">
+            +1
+          </button>
           <button onClick={() => setBpm(grid.bpm / 2)}>÷2</button>
           <button onClick={() => setBpm(grid.bpm * 2)}>×2</button>
           <label>
@@ -444,5 +447,62 @@ export function BeatgridEditor({ hash }: { hash: string }) {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Campo de texto do BPM. Enquanto se digita, o texto fica como está (apagar tudo ou passar por
+ * "1" e "12" a caminho de "128" não volta o valor) e a grade só muda quando o número é válido.
+ * Ao sair do campo, um texto inválido volta para o BPM atual. Enter confirma, Esc desfaz, e as
+ * setas mudam 1 BPM (Shift: 0,1; Alt/Option: 0,01).
+ */
+function BpmField({ bpm, onChange }: { bpm: number; onChange: (bpm: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const atFocus = useRef(bpm)
+  const editing = draft !== null
+  const invalid = editing && parseBpm(draft) === null
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.currentTarget.blur()
+    } else if (event.key === 'Escape') {
+      event.stopPropagation()
+      onChange(atFocus.current)
+      setDraft(null)
+      event.currentTarget.blur()
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      event.preventDefault()
+      const size = event.shiftKey ? 0.1 : event.altKey ? 0.01 : 1
+      const next = stepBpm(parseBpm(draft ?? '') ?? bpm, event.key === 'ArrowUp' ? size : -size)
+      onChange(next)
+      setDraft(formatBpm(next))
+    }
+  }
+
+  return (
+    <label>
+      BPM
+      <input
+        type="text"
+        inputMode="decimal"
+        className="bpm-field"
+        value={draft ?? formatBpm(bpm)}
+        aria-invalid={invalid}
+        title={`Entre ${MIN_BPM} e ${MAX_BPM}. Setas: ±1 (Shift ±0,1, Alt ±0,01)`}
+        data-testid="grid-bpm"
+        onFocus={(e) => {
+          atFocus.current = bpm
+          setDraft(formatBpm(bpm))
+          e.currentTarget.select()
+        }}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          const next = parseBpm(e.target.value)
+          if (next !== null) onChange(next)
+        }}
+        onKeyDown={onKeyDown}
+        onBlur={() => setDraft(null)}
+      />
+    </label>
   )
 }

@@ -57,6 +57,27 @@ test('importa, monta, ensaia, salva e exporta um set', async () => {
   await expect(bpms.nth(1)).toHaveText(/^127\.0/)
   await expect(page.locator('.library-item .key')).toHaveText(['8A', '8B'])
 
+  // Campo de BPM do beatgrid: digitar não volta o valor no meio, aceita vírgula, setas e botões
+  // mudam 1 BPM e um texto inválido volta ao sair do campo. Cancelar descarta tudo.
+  await items.nth(0).click()
+  await page.getByRole('button', { name: 'Beatgrid e cues' }).click()
+  const bpmField = page.getByTestId('grid-bpm')
+  await expect(bpmField).toHaveValue(/^124/)
+  await bpmField.fill('1')
+  await expect(bpmField).toHaveValue('1')
+  await expect(bpmField).toHaveAttribute('aria-invalid', 'true')
+  await bpmField.fill('128,5')
+  await expect(bpmField).toHaveAttribute('aria-invalid', 'false')
+  await bpmField.press('ArrowUp')
+  await expect(bpmField).toHaveValue('129,5')
+  await page.getByRole('button', { name: '+1', exact: true }).click()
+  await expect(bpmField).toHaveValue('130,5')
+  await bpmField.fill('12')
+  await bpmField.press('Tab')
+  await expect(bpmField).toHaveValue('130,5')
+  await page.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(bpmField).toBeHidden()
+
   await items.nth(0).dblclick()
   await items.nth(1).dblclick()
   await expect(page.getByTestId('transition')).toBeVisible()
