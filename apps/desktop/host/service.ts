@@ -151,7 +151,13 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
       const entries: LibraryEntry[] = []
       const errors: string[] = []
       const originals: string[] = []
-      const files = await downloadAudio(url.trim(), downloadsDir, () => ytDlp.ensure(), options)
+      const { files, errors: skipped } = await downloadAudio(
+        url.trim(),
+        downloadsDir,
+        () => ytDlp.ensure(),
+        options,
+      )
+      errors.push(...skipped)
       for (const file of files) {
         try {
           const entry = await register(file.path, undefined, file.pageUrl)

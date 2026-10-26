@@ -16,3 +16,4 @@ Sem login, o SoundCloud entrega às faixas públicas só o stream: AAC de 160 kb
 
 - No macOS, ler os cookies do Safari exige dar ao app (ou ao Terminal, no `pnpm dev`) acesso total ao disco; Chrome, Brave e Firefox costumam funcionar sem isso (o Chrome pede a senha do Chaveiro na primeira vez).
 - Faixa sem download liberado continua em 160 kbps. Para qualidade de pista, o caminho é comprar o arquivo (Beatport, Bandcamp) e importar.
+- Com login de uma conta Go+, o SoundCloud às vezes só oferece a versão com DRM de uma faixa, e o yt-dlp a recusa. O app tenta de novo essa faixa sem login: se houver o stream aberto, ele vem; se só houver a prévia de 30 s, a faixa fica de fora com o motivo explicado. Numa playlist, as outras faixas continuam (`--ignore-errors`).

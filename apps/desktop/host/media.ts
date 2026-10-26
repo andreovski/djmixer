@@ -47,13 +47,24 @@ const INSTALL_HINT: Record<Tool, string> = {
 }
 
 /** Roda a ferramenta; `command` troca o executável achado por `findTool`. */
-export function run(tool: Tool, args: string[], command = findTool(tool)): Promise<string> {
+export async function run(tool: Tool, args: string[], command = findTool(tool)): Promise<string> {
+  const { code, out, err } = await runResult(tool, args, command)
+  if (code !== 0) throw new Error(`${tool} saiu com código ${code}: ${err.trim().slice(-2000)}`)
+  return out
+}
+
+/** Como `run`, mas devolve a saída mesmo quando a ferramenta termina com erro. */
+export function runResult(
+  tool: Tool,
+  args: string[],
+  command = findTool(tool),
+): Promise<{ code: number | null; out: string; err: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
     let err = ''
     child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()))
-    child.stderr.on('data', (chunk: Buffer) => (err = (err + chunk.toString()).slice(-2000)))
+    child.stderr.on('data', (chunk: Buffer) => (err = (err + chunk.toString()).slice(-20000)))
     child.on('error', (error: NodeJS.ErrnoException) =>
       reject(
         error.code === 'ENOENT'
@@ -61,11 +72,7 @@ export function run(tool: Tool, args: string[], command = findTool(tool)): Promi
           : error,
       ),
     )
-    child.on('close', (code) =>
-      code === 0
-        ? resolve(out)
-        : reject(new Error(`${tool} saiu com código ${code}: ${err.trim()}`)),
-    )
+    child.on('close', (code) => resolve({ code, out, err }))
   })
 }
 

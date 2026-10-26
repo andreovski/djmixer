@@ -4,7 +4,7 @@
 // DRM, então serviços como Spotify e as faixas Go+ do SoundCloud ficam de fora.
 import { dirname, isAbsolute } from 'node:path'
 import { COOKIE_BROWSERS, type UrlImportOptions } from './api.ts'
-import { findTool, run } from './media.ts'
+import { findTool, run, runResult } from './media.ts'
 
 export interface DownloadedFile {
   path: string
@@ -23,9 +23,26 @@ export function isHttpUrl(text: string): boolean {
   }
 }
 
+export interface DownloadResult {
+  files: DownloadedFile[]
+  /** Itens que não vieram (numa playlist, as outras faixas continuam), já explicados. */
+  errors: string[]
+}
+
+/** Erro de um item, como o yt-dlp o imprime: "ERROR: [soundcloud] 123: motivo". */
+interface ItemError {
+  id: string | null
+  message: string
+}
+
+const DRM = /DRM protected/i
+const ONLY_PREVIEW = /Requested format is not available/i
+
 /**
  * Baixa o melhor áudio disponível para `dir`, com título e artista gravados no arquivo (o ffprobe
- * os lê na importação). Um arquivo já baixado não é baixado de novo.
+ * os lê na importação). Um arquivo já baixado não é baixado de novo. Faixas protegidas por DRM
+ * ficam de fora (docs/decisoes/0013): com login, o SoundCloud às vezes só oferece à conta a versão
+ * com DRM, e aí a faixa é tentada de novo sem login, onde pode existir o stream aberto.
  */
 export async function downloadAudio(
   url: string,
@@ -33,7 +50,7 @@ export async function downloadAudio(
   /** Caminho do yt-dlp, instalado se preciso (ver host/ytdlp.ts). */
   ytDlp: () => Promise<string>,
   options: UrlImportOptions = {},
-): Promise<DownloadedFile[]> {
+): Promise<DownloadResult> {
   if (!isHttpUrl(url)) throw new Error('Cole um endereço que comece com https://')
   const browser = options.browser ?? null
   if (browser && !(COOKIE_BROWSERS as readonly string[]).includes(browser)) {
@@ -41,35 +58,72 @@ export async function downloadAudio(
   }
   const ytDlpPath = await ytDlp()
   const ffmpeg = findTool('ffmpeg')
-  const out = await run(
-    'yt-dlp',
-    [
-      '--no-progress',
-      '--no-warnings',
-      '--yes-playlist',
-      // O yt-dlp já prefere o original do artista (formato "download") quando existe; sem login,
-      // o SoundCloud costuma negá-lo e sobra o melhor stream.
-      '--format',
-      'bestaudio/best',
-      ...(browser ? ['--cookies-from-browser', browser] : []),
-      '--embed-metadata',
-      // A capa fica ao lado do áudio, com o mesmo nome e extensão .jpg (ver coverSidecar).
-      '--write-thumbnail',
-      '--convert-thumbnails',
-      'jpg',
-      // Sem um caminho, o yt-dlp procura só no PATH, que apps abertos pelo Finder não herdam.
-      ...(isAbsolute(ffmpeg) ? ['--ffmpeg-location', dirname(ffmpeg)] : []),
-      '--output',
-      `${dir}/%(extractor)s-%(id)s.%(ext)s`,
-      // --print sozinho só simula; --no-simulate faz baixar e imprimir.
-      '--no-simulate',
-      '--print',
-      'after_move:%(.{filepath,webpage_url,format_id})j',
-      '--',
-      url,
-    ],
-    ytDlpPath,
-  )
+  const attempt = (target: string, withLogin: boolean) =>
+    runResult(
+      'yt-dlp',
+      [
+        '--no-progress',
+        '--no-warnings',
+        '--yes-playlist',
+        // Numa playlist, uma faixa que falha não impede as outras.
+        '--ignore-errors',
+        // O yt-dlp já prefere o original do artista (formato "download") quando existe; sem login,
+        // o SoundCloud costuma negá-lo e sobra o melhor stream. Prévias de 30 s não servem.
+        '--format',
+        'bestaudio[format_id!*=preview]/best[format_id!*=preview]',
+        ...(withLogin && browser ? ['--cookies-from-browser', browser] : []),
+        '--embed-metadata',
+        // A capa fica ao lado do áudio, com o mesmo nome e extensão .jpg (ver coverSidecar).
+        '--write-thumbnail',
+        '--convert-thumbnails',
+        'jpg',
+        // Sem um caminho, o yt-dlp procura só no PATH, que apps abertos pelo Finder não herdam.
+        ...(isAbsolute(ffmpeg) ? ['--ffmpeg-location', dirname(ffmpeg)] : []),
+        '--output',
+        `${dir}/%(extractor)s-%(id)s.%(ext)s`,
+        // --print sozinho só simula; --no-simulate faz baixar e imprimir.
+        '--no-simulate',
+        '--print',
+        'after_move:%(.{filepath,webpage_url,format_id})j',
+        '--',
+        target,
+      ],
+      ytDlpPath,
+    )
+
+  const first = await attempt(url, true)
+  const files = parseFiles(first.out, url)
+  let failures = itemErrors(first.err)
+  if (browser) {
+    // Com login, a faixa só veio com DRM: tenta sem login, pelo endereço da API.
+    const retried: ItemError[] = []
+    for (const failure of failures) {
+      if (!failure.id || !DRM.test(failure.message) || !/^\d+$/.test(failure.id)) {
+        retried.push(failure)
+        continue
+      }
+      const again = await attempt(`https://api.soundcloud.com/tracks/${failure.id}`, false)
+      const got = parseFiles(again.out, url)
+      files.push(...got)
+      if (got.length === 0) {
+        const [error] = itemErrors(again.err)
+        retried.push(
+          error && ONLY_PREVIEW.test(error.message) ? { ...failure, message: 'DRM' } : failure,
+        )
+      }
+    }
+    failures = retried
+  }
+  const errors = failures.map(explain)
+  if (files.length === 0) {
+    if (errors.length) throw new Error(errors.join('; '))
+    if (first.code !== 0)
+      throw new Error(`yt-dlp saiu com código ${first.code}: ${first.err.trim().slice(-2000)}`)
+  }
+  return { files, errors }
+}
+
+function parseFiles(out: string, url: string): DownloadedFile[] {
   return out
     .split('\n')
     .filter((line) => line.startsWith('{'))
@@ -86,6 +140,28 @@ export async function downloadAudio(
         original: info.format_id === 'download',
       }
     })
+}
+
+function itemErrors(err: string): ItemError[] {
+  return err
+    .split('\n')
+    .filter((line) => line.startsWith('ERROR:'))
+    .map((line) => {
+      const match = /^ERROR: (?:\[[^\]]+\] )?(?:([\w-]+): )?(.*)$/.exec(line.trim())
+      return { id: match?.[1] ?? null, message: match?.[2] ?? line }
+    })
+}
+
+/** Mensagem para o usuário, com o motivo de cada falha conhecida. */
+function explain({ id, message }: ItemError): string {
+  const which = id ? `faixa ${id}` : 'faixa'
+  if (DRM.test(message) || message === 'DRM') {
+    return `${which}: só existe protegida por DRM (exclusiva do SoundCloud Go+), e o app não baixa conteúdo com DRM. Para usá-la, compre o arquivo (Beatport, Bandcamp) e importe.`
+  }
+  if (ONLY_PREVIEW.test(message)) {
+    return `${which}: o SoundCloud só oferece uma prévia de 30 s (faixa exclusiva do Go+), que o app não importa.`
+  }
+  return `${which}: ${message}`
 }
 
 /** Caminho da capa que o yt-dlp grava ao lado de um áudio baixado. */
