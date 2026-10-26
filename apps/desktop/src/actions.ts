@@ -17,7 +17,7 @@ import {
   urlTracksInSet,
 } from './editing.ts'
 import { host } from './host.ts'
-import { addTrack, removeTrack, uniqueName } from './playlists.ts'
+import { moveTrack, uniqueName } from './playlists.ts'
 import { currentGroup, useApp } from './store.ts'
 import type { AnalysisRequest, AnalysisResponse } from './workers/analysis.worker.ts'
 
@@ -160,10 +160,16 @@ export async function removeFromLibrary(hash: string): Promise<void> {
     Object.entries(state().library).filter(([candidate]) => candidate !== hash),
   )
   // O host já tirou a faixa das playlists guardadas.
-  const playlists = state().playlists.map((p) =>
-    p.hashes.includes(hash) ? removeTrack(p, hash) : p,
-  )
+  const playlists = moveTrack(state().playlists, hash, null)
   state().set({ library, playlists })
+}
+
+export async function revealTrack(hash: string): Promise<void> {
+  try {
+    await host.revealTrack?.(hash)
+  } catch (error) {
+    state().notify('error', `Não foi possível mostrar o arquivo: ${errorText(error)}`)
+  }
 }
 
 // Capas: pedidas ao host uma vez por faixa e guardadas como URL blob.
@@ -191,44 +197,41 @@ export async function loadPlaylists(): Promise<void> {
   }
 }
 
-async function storePlaylist(playlist: Playlist): Promise<void> {
-  const others = state().playlists
-  const exists = others.some((p) => p.id === playlist.id)
-  state().set({
-    playlists: exists
-      ? others.map((p) => (p.id === playlist.id ? playlist : p))
-      : [...others, playlist],
-  })
+async function storePlaylists(next: Playlist[]): Promise<void> {
+  const before = new Map(state().playlists.map((p) => [p.id, p]))
+  state().set({ playlists: next })
   try {
-    await host.savePlaylist(playlist)
+    for (const playlist of next) {
+      if (before.get(playlist.id) !== playlist) await host.savePlaylist(playlist)
+    }
   } catch (error) {
     state().notify('error', `Não foi possível salvar a playlist: ${errorText(error)}`)
   }
 }
 
-/** Cria a playlist, já com as faixas dadas, e passa a mostrá-la. */
-export async function createPlaylist(name: string, hashes: string[] = []): Promise<void> {
+/** Cria a playlist (pasta), já com as faixas dadas, tiradas das outras. Devolve o id. */
+export async function createPlaylist(name: string, hashes: string[] = []): Promise<string> {
   const playlist = {
     id: crypto.randomUUID(),
     name: uniqueName(state().playlists, name.trim() || 'Playlist'),
-    hashes,
+    hashes: [],
   }
-  await storePlaylist(playlist)
-  state().set({ playlistId: playlist.id })
+  let next = [...state().playlists, playlist]
+  for (const hash of hashes) next = moveTrack(next, hash, playlist.id)
+  await storePlaylists(next)
+  return playlist.id
 }
 
 export async function renamePlaylist(id: string, name: string): Promise<void> {
-  const playlist = state().playlists.find((p) => p.id === id)
   const others = state().playlists.filter((p) => p.id !== id)
-  if (playlist && name.trim())
-    await storePlaylist({ ...playlist, name: uniqueName(others, name.trim()) })
+  if (!name.trim()) return
+  const renamed = uniqueName(others, name.trim())
+  await storePlaylists(state().playlists.map((p) => (p.id === id ? { ...p, name: renamed } : p)))
 }
 
+/** Apaga a pasta; as faixas dela ficam soltas na biblioteca. */
 export async function deletePlaylist(id: string): Promise<void> {
-  state().set({
-    playlists: state().playlists.filter((p) => p.id !== id),
-    playlistId: state().playlistId === id ? null : state().playlistId,
-  })
+  state().set({ playlists: state().playlists.filter((p) => p.id !== id) })
   try {
     await host.deletePlaylist(id)
   } catch (error) {
@@ -236,21 +239,9 @@ export async function deletePlaylist(id: string): Promise<void> {
   }
 }
 
-export async function addToPlaylist(id: string, hash: string): Promise<void> {
-  const playlist = state().playlists.find((p) => p.id === id)
-  if (!playlist) return
-  const next = addTrack(playlist, hash)
-  if (next === playlist) {
-    state().notify('info', `A faixa já está em "${playlist.name}".`)
-    return
-  }
-  await storePlaylist(next)
-  state().notify('info', `Adicionada a "${playlist.name}".`)
-}
-
-export async function removeFromPlaylist(id: string, hash: string): Promise<void> {
-  const playlist = state().playlists.find((p) => p.id === id)
-  if (playlist) await storePlaylist(removeTrack(playlist, hash))
+/** Move a faixa para a pasta (null: deixa solta). */
+export async function moveToPlaylist(hash: string, id: string | null): Promise<void> {
+  await storePlaylists(moveTrack(state().playlists, hash, id))
 }
 
 /** Põe a faixa no grupo selecionado (criando um grupo se não houver nenhum). */

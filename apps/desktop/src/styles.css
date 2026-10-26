@@ -158,9 +158,6 @@ label {
   font-weight: 600;
   margin-right: 6px;
 }
-.filter {
-  margin: 0 12px 8px;
-}
 .panel-buttons {
   display: flex;
   gap: 6px;
@@ -174,15 +171,96 @@ label {
   flex: 1;
   min-width: 0;
 }
-.playlist-bar {
+.library-folder {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
-  margin: 0 12px 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #252a35;
+  cursor: default;
+  user-select: none;
+  font-weight: 600;
 }
-.playlist-bar select {
-  flex: 1 1 10rem;
+.library-folder:hover {
+  background: #232835;
+}
+.library-folder.selected {
+  background: #253545;
+}
+.library-folder.drop,
+.library-list.drop {
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+}
+.lf-caret {
+  width: 12px;
+  color: var(--muted);
+}
+/* Pasta desenhada em CSS: aba em cima, corpo embaixo. */
+.lf-icon {
+  position: relative;
+  width: 16px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--gold);
+}
+.lf-icon::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 7px;
+  height: 4px;
+  border-radius: 2px 2px 0 0;
+  background: var(--gold);
+}
+.lf-name {
+  flex: 1;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.library-item.nested,
+.empty.nested {
+  padding-left: 30px;
+}
+.track-quality {
+  flex-basis: 100%;
+  min-width: 0;
+  font-size: 12px;
+}
+.tq-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tq-line {
+  font-variant-numeric: tabular-nums;
+}
+.tq-tag {
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  font-size: 10px;
+}
+.tq-tag.lossless {
+  color: var(--accent);
+}
+.tq-tag.lossy {
+  color: var(--gold);
+}
+.tq-source {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.la-label {
+  flex-basis: 100%;
+  font-weight: 600;
 }
 .li-cover {
   flex: none;

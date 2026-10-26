@@ -63,3 +63,22 @@ export async function downloadAudio(url: string, dir: string): Promise<Downloade
 export function coverSidecar(audioPath: string): string {
   return audioPath.replace(/\.[^./\\]+$/, '') + '.jpg'
 }
+
+/** Baixa só a capa da página, para o lugar de coverSidecar(audioPath). */
+export async function downloadThumbnail(pageUrl: string, audioPath: string): Promise<void> {
+  if (!isHttpUrl(pageUrl)) return
+  const ffmpeg = findTool('ffmpeg')
+  await run('yt-dlp', [
+    '--no-warnings',
+    '--no-playlist',
+    '--skip-download',
+    '--write-thumbnail',
+    '--convert-thumbnails',
+    'jpg',
+    ...(ffmpeg.includes('/') ? ['--ffmpeg-location', dirname(ffmpeg)] : []),
+    '--output',
+    `${coverSidecar(audioPath).replace(/\.jpg$/, '')}.%(ext)s`,
+    '--',
+    pageUrl,
+  ])
+}

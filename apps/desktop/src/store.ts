@@ -43,9 +43,8 @@ export interface AppState {
   peaks: Record<string, Uint8Array>
   /** URL (blob:) da capa de cada faixa; null quando a faixa não tem capa. */
   covers: Record<string, string | null>
+  /** Playlists da biblioteca, que funcionam como pastas (ver src/playlists.ts). */
   playlists: Playlist[]
-  /** Playlist mostrada na biblioteca; null mostra todas as faixas. */
-  playlistId: string | null
   /** Faixas do projeto aberto que não foram achadas no disco (por hash). */
   missing: string[]
 
@@ -90,7 +89,6 @@ export const useApp = create<AppState>((set, get) => ({
   peaks: {},
   covers: {},
   playlists: [],
-  playlistId: null,
   missing: [],
 
   groupId: null,

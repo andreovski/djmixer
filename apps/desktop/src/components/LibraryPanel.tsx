@@ -1,31 +1,38 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Biblioteca: importar arquivos locais ou de uma URL (yt-dlp, só no app desktop), organizar em
-// playlists, ver capa, BPM, tom (Camelot) e estado da análise, e mandar uma faixa para o grupo
-// selecionado.
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import type { LibraryEntry } from '../../host/api.ts'
+// Biblioteca como um Finder: playlists são pastas (cada faixa fica em no máximo uma) e as faixas
+// sem pasta aparecem soltas embaixo. Importar arquivos locais ou de uma URL (yt-dlp, só no app
+// desktop), ver capa, BPM, tom (Camelot), qualidade do arquivo e estado da análise, e mandar uma
+// faixa para o grupo selecionado.
+import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from 'react'
+import type { AudioInfo, LibraryEntry } from '../../host/api.ts'
 import {
   addToGroup,
-  addToPlaylist,
   createPlaylist,
   deletePlaylist,
   importFromUrl,
   importTracks,
   loadCover,
+  moveToPlaylist,
   reanalyze,
   removeFromLibrary,
-  removeFromPlaylist,
   renamePlaylist,
+  revealTrack,
 } from '../actions.ts'
 import { host } from '../host.ts'
 import { entryGrid } from '../editing.ts'
-import { visibleEntries } from '../playlists.ts'
+import { libraryTree } from '../playlists.ts'
+import { describeAudio } from '../quality.ts'
 import { COMPACT_QUERY, matches, TOUCH_QUERY, useMedia } from '../responsive.ts'
 import { useApp } from '../store.ts'
 import { formatTimestamp } from '@djmixer/shared'
 
-/** Valor do seletor "Adicionar à playlist" que cria uma playlist nova com a faixa. */
+/** Valores especiais do seletor "Mover para". */
+const LOOSE = '__solta__'
 const NEW_PLAYLIST = '__nova__'
+/** Tipo do dado arrastado: o hash da faixa. */
+const DRAG_TYPE = 'application/x-djmixer-track'
+
+type Selection = { kind: 'track'; hash: string } | { kind: 'folder'; id: string } | null
 
 function Cover({ entry }: { entry: LibraryEntry }) {
   const url = useApp((s) => s.covers[entry.hash])
@@ -41,24 +48,71 @@ function Cover({ entry }: { entry: LibraryEntry }) {
   )
 }
 
+/** Qualidade do arquivo da faixa selecionada, pedida ao host quando a seleção muda. */
+function Quality({ entry }: { entry: LibraryEntry }) {
+  const [info, setInfo] = useState<AudioInfo | null | undefined>(undefined)
+  useEffect(() => {
+    let current = true
+    setInfo(undefined)
+    if (!host.getAudioInfo || entry.missing) {
+      setInfo(null)
+      return
+    }
+    host
+      .getAudioInfo(entry.hash)
+      .then((result) => current && setInfo(result))
+      .catch(() => current && setInfo(null))
+    return () => {
+      current = false
+    }
+  }, [entry.hash, entry.missing])
+  return (
+    <div className="track-quality" data-testid="track-quality">
+      <div className="tq-title">{entry.title}</div>
+      {info === undefined && <span className="muted">lendo o arquivo…</span>}
+      {info === null && <span className="muted">qualidade indisponível</span>}
+      {info && (
+        <div className="tq-line">
+          <span className={`tq-tag ${info.lossless ? 'lossless' : 'lossy'}`}>
+            {info.lossless ? 'sem perdas' : 'com perdas'}
+          </span>
+          {describeAudio(info).join(' · ')}
+        </div>
+      )}
+      {entry.sourceUrl && (
+        <div className="tq-source" title={entry.sourceUrl}>
+          Baixada de {entry.sourceUrl}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function LibraryPanel() {
   const library = useApp((s) => s.library)
   const analysis = useApp((s) => s.analysis)
   const playlists = useApp((s) => s.playlists)
-  const playlistId = useApp((s) => s.playlistId)
   const set = useApp((s) => s.set)
   const [filter, setFilter] = useState('')
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Selection>(null)
+  const [open, setOpen] = useState<Set<string>>(new Set())
   const [urlOpen, setUrlOpen] = useState(false)
   const [url, setUrl] = useState('')
   const [downloading, setDownloading] = useState(false)
-  // Campo de nome aberto para criar ou renomear playlist.
+  // Campo de nome aberto para criar ou renomear pasta.
   const [naming, setNaming] = useState<'new' | 'rename' | null>(null)
   const [name, setName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Pasta (id) ou raiz ('') sob a faixa arrastada.
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
   const touch = useMedia(TOUCH_QUERY)
 
-  const playlist = playlists.find((p) => p.id === playlistId) ?? null
+  const tree = useMemo(() => libraryTree(library, playlists, filter), [library, playlists, filter])
+  const searching = filter.trim() !== ''
+  const track = selected?.kind === 'track' ? library[selected.hash] : undefined
+  const folder =
+    selected?.kind === 'folder' ? playlists.find((p) => p.id === selected.id) : undefined
+  const folderOf = (hash: string) => playlists.find((p) => p.hashes.includes(hash))?.id ?? LOOSE
 
   // Em tela compacta o set fica em outra aba: depois de adicionar, mostra o grupo.
   const add = (hash: string) => {
@@ -67,10 +121,18 @@ export function LibraryPanel() {
     if (useApp.getState().project !== before && matches(COMPACT_QUERY)) set({ pane: 'set' })
   }
 
-  const entries = useMemo(
-    () => visibleEntries(library, playlist, filter),
-    [library, playlist, filter],
-  )
+  const select = (next: Selection) => {
+    setSelected(next)
+    setConfirmDelete(false)
+    setNaming(null)
+  }
+
+  const toggle = (id: string) => {
+    const next = new Set(open)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setOpen(next)
+  }
 
   const submitUrl = async (event: FormEvent) => {
     event.preventDefault()
@@ -84,30 +146,52 @@ export function LibraryPanel() {
     }
   }
 
-  const choosePlaylist = (id: string) => {
-    set({ playlistId: id || null })
-    setNaming(null)
-    setConfirmDelete(false)
-  }
-
   const startNaming = (mode: 'new' | 'rename') => {
     setNaming(mode)
-    setName(mode === 'rename' ? (playlist?.name ?? '') : '')
+    setName(mode === 'rename' ? (folder?.name ?? '') : '')
     setConfirmDelete(false)
   }
 
   const submitName = async (event: FormEvent) => {
     event.preventDefault()
-    if (naming === 'rename' && playlist) await renamePlaylist(playlist.id, name)
-    else await createPlaylist(name)
+    if (naming === 'rename' && folder) await renamePlaylist(folder.id, name)
+    else {
+      const id = await createPlaylist(name)
+      setOpen(new Set(open).add(id))
+      select({ kind: 'folder', id })
+    }
     setNaming(null)
   }
 
-  const onAddToPlaylist = (value: string) => {
-    if (!selected || !value) return
-    if (value === NEW_PLAYLIST) void createPlaylist('Playlist', [selected])
-    else void addToPlaylist(value, selected)
+  const move = async (hash: string, value: string) => {
+    if (!value) return
+    if (value === NEW_PLAYLIST) {
+      const id = await createPlaylist('Playlist', [hash])
+      setOpen(new Set(open).add(id))
+    } else {
+      await moveToPlaylist(hash, value === LOOSE ? null : value)
+      if (value !== LOOSE) setOpen(new Set(open).add(value))
+    }
   }
+
+  // Arrastar uma faixa para uma pasta (ou para fora delas) a move.
+  const dropProps = (target: string) => ({
+    onDragOver: (event: DragEvent) => {
+      if (!event.dataTransfer.types.includes(DRAG_TYPE)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setDropTarget(target)
+    },
+    onDragLeave: () => setDropTarget((current) => (current === target ? null : current)),
+    onDrop: (event: DragEvent) => {
+      const hash = event.dataTransfer.getData(DRAG_TYPE)
+      setDropTarget(null)
+      if (!hash) return
+      event.preventDefault()
+      event.stopPropagation()
+      void move(hash, target || LOOSE)
+    },
+  })
 
   const status = (entry: LibraryEntry) => {
     const info = analysis[entry.hash]
@@ -123,7 +207,58 @@ export function LibraryPanel() {
     return null
   }
 
-  const total = Object.keys(library).length
+  const trackRow = (entry: LibraryEntry, nested: boolean) => {
+    const grid = entryGrid(entry)
+    const isSelected = selected?.kind === 'track' && selected.hash === entry.hash
+    return (
+      <div
+        key={entry.hash}
+        role="listitem"
+        data-testid="library-item"
+        className={`library-item${nested ? ' nested' : ''}${isSelected ? ' selected' : ''}`}
+        onClick={() => select({ kind: 'track', hash: entry.hash })}
+        onDoubleClick={() => add(entry.hash)}
+        draggable={!touch}
+        onDragStart={(event) => {
+          event.dataTransfer.setData(DRAG_TYPE, entry.hash)
+          event.dataTransfer.effectAllowed = 'move'
+        }}
+        onDragEnd={() => setDropTarget(null)}
+        title={
+          touch
+            ? 'Toque para selecionar; use Adicionar ao grupo'
+            : 'Dois cliques: adicionar ao grupo selecionado. Arraste para uma pasta para mover.'
+        }
+      >
+        <Cover entry={entry} />
+        <div className="li-main">
+          <div className="li-title">{entry.title}</div>
+          <div className="li-sub">
+            {entry.sourceUrl && (
+              <span
+                className="li-source"
+                title={`Baixada de ${entry.sourceUrl}; não entra no export`}
+              >
+                URL
+              </span>
+            )}
+            {entry.artist || '—'}
+          </div>
+        </div>
+        <div className="li-meta">
+          <span className="bpm" data-testid="bpm">
+            {grid ? grid.bpm.toFixed(1) : '—'}
+            {entry.edits.grid && <sup title="Grade corrigida à mão">✎</sup>}
+          </span>
+          <span className="key">{entry.analysis?.key?.camelot ?? ''}</span>
+          <span className="muted">{formatTimestamp(entry.durationSeconds)}</span>
+          {status(entry)}
+        </div>
+      </div>
+    )
+  }
+
+  const empty = Object.keys(library).length === 0 && playlists.length === 0
 
   return (
     <aside className="library">
@@ -156,37 +291,16 @@ export function LibraryPanel() {
           </button>
         </form>
       )}
-      <div className="playlist-bar">
-        <select
-          id="library-playlist"
-          aria-label="Playlist"
-          value={playlistId ?? ''}
-          onChange={(e) => choosePlaylist(e.target.value)}
-        >
-          <option value="">Todas as faixas ({total})</option>
-          {playlists.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.hashes.filter((hash) => library[hash]).length})
-            </option>
-          ))}
-        </select>
-        <button onClick={() => startNaming('new')} title="Criar uma playlist">
+      <div className="inline-form">
+        <input
+          id="library-filter"
+          placeholder="Buscar em toda a biblioteca"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+        <button onClick={() => startNaming('new')} title="Criar uma pasta de playlist">
           + Playlist
         </button>
-        {playlist && (
-          <>
-            <button onClick={() => startNaming('rename')}>Renomear</button>
-            <button
-              className={confirmDelete ? 'danger' : undefined}
-              onClick={() =>
-                confirmDelete ? void deletePlaylist(playlist.id) : setConfirmDelete(true)
-              }
-              title="As faixas continuam na biblioteca"
-            >
-              {confirmDelete ? 'Confirmar' : 'Apagar'}
-            </button>
-          </>
-        )}
       </div>
       {naming && (
         <form className="inline-form" onSubmit={(event) => void submitName(event)}>
@@ -206,97 +320,106 @@ export function LibraryPanel() {
           </button>
         </form>
       )}
-      <input
-        className="filter"
-        placeholder="Filtrar por título ou artista"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-      />
-      <div className="library-list" role="list">
-        {entries.length === 0 && (
-          <p className="empty">
-            {playlist
-              ? 'Playlist vazia. Selecione uma faixa em "Todas as faixas" e use Adicionar à playlist.'
-              : 'Importe MP3, WAV, FLAC ou AAC do seu computador para começar.'}
-          </p>
+      <div
+        className={`library-list${dropTarget === '' ? ' drop' : ''}`}
+        role="list"
+        {...dropProps('')}
+      >
+        {empty && (
+          <p className="empty">Importe MP3, WAV, FLAC ou AAC do seu computador para começar.</p>
         )}
-        {entries.map((entry) => {
-          const grid = entryGrid(entry)
+        {searching && tree.folders.length === 0 && tree.loose.length === 0 && !empty && (
+          <p className="empty">Nada encontrado.</p>
+        )}
+        {tree.folders.map(({ playlist, entries }) => {
+          const expanded = searching || open.has(playlist.id)
+          const isSelected = selected?.kind === 'folder' && selected.id === playlist.id
           return (
-            <div
-              key={entry.hash}
-              role="listitem"
-              data-testid="library-item"
-              className={`library-item${selected === entry.hash ? ' selected' : ''}`}
-              onClick={() => setSelected(entry.hash)}
-              onDoubleClick={() => add(entry.hash)}
-              title={
-                touch
-                  ? 'Toque para selecionar; use Adicionar ao grupo'
-                  : 'Dois cliques: adicionar ao grupo selecionado'
-              }
-            >
-              <Cover entry={entry} />
-              <div className="li-main">
-                <div className="li-title">{entry.title}</div>
-                <div className="li-sub">
-                  {entry.sourceUrl && (
-                    <span
-                      className="li-source"
-                      title={`Baixada de ${entry.sourceUrl}; não entra no export`}
-                    >
-                      URL
-                    </span>
-                  )}
-                  {entry.artist || '—'}
-                </div>
-              </div>
-              <div className="li-meta">
-                <span className="bpm" data-testid="bpm">
-                  {grid ? grid.bpm.toFixed(1) : '—'}
-                  {entry.edits.grid && <sup title="Grade corrigida à mão">✎</sup>}
+            <div key={playlist.id} role="group" aria-label={playlist.name}>
+              <div
+                role="listitem"
+                data-testid="library-folder"
+                aria-expanded={expanded}
+                className={`library-folder${isSelected ? ' selected' : ''}${dropTarget === playlist.id ? ' drop' : ''}`}
+                onClick={() => {
+                  select({ kind: 'folder', id: playlist.id })
+                  if (!searching) toggle(playlist.id)
+                }}
+                {...dropProps(playlist.id)}
+              >
+                <span className="lf-caret" aria-hidden="true">
+                  {expanded ? '▾' : '▸'}
                 </span>
-                <span className="key">{entry.analysis?.key?.camelot ?? ''}</span>
-                <span className="muted">{formatTimestamp(entry.durationSeconds)}</span>
-                {status(entry)}
+                <span className="lf-icon" aria-hidden="true" />
+                <span className="lf-name">{playlist.name}</span>
+                <span className="muted">{entries.length}</span>
               </div>
+              {expanded && entries.map((entry) => trackRow(entry, true))}
+              {expanded && entries.length === 0 && (
+                <p className="empty nested">
+                  {touch ? 'Pasta vazia: use Mover para…' : 'Pasta vazia: arraste faixas para cá.'}
+                </p>
+              )}
             </div>
           )
         })}
+        {tree.loose.map((entry) => trackRow(entry, false))}
       </div>
-      {selected && library[selected] && (
+      {track && selected?.kind === 'track' && (
         <div className="library-actions">
-          <button onClick={() => add(selected)}>Adicionar ao grupo</button>
-          <button
-            onClick={() => set({ gridEditor: selected })}
-            disabled={!entryGrid(library[selected])}
-          >
+          <Quality entry={track} />
+          <button onClick={() => add(selected.hash)}>Adicionar ao grupo</button>
+          <button onClick={() => set({ gridEditor: selected.hash })} disabled={!entryGrid(track)}>
             Beatgrid e cues
           </button>
           <select
-            id="add-to-playlist"
-            aria-label="Adicionar à playlist"
+            id="move-to-playlist"
+            aria-label="Mover para playlist"
             value=""
-            onChange={(e) => onAddToPlaylist(e.target.value)}
+            onChange={(e) => void move(selected.hash, e.target.value)}
           >
-            <option value="">Adicionar à playlist…</option>
-            {playlists
-              .filter((p) => p.id !== playlistId)
+            <option value="">Mover para…</option>
+            {[...playlists]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .filter((p) => p.id !== folderOf(selected.hash))
               .map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
+            {folderOf(selected.hash) !== LOOSE && <option value={LOOSE}>Fora das playlists</option>}
             <option value={NEW_PLAYLIST}>Nova playlist com esta faixa</option>
           </select>
-          {playlist && (
-            <button onClick={() => void removeFromPlaylist(playlist.id, selected)}>
-              Tirar da playlist
-            </button>
+          {host.revealTrack && (
+            <button onClick={() => void revealTrack(selected.hash)}>Mostrar no Finder</button>
           )}
-          <button onClick={() => reanalyze(selected)}>Analisar de novo</button>
-          <button onClick={() => void removeFromLibrary(selected).then(() => setSelected(null))}>
+          <button onClick={() => reanalyze(selected.hash)}>Analisar de novo</button>
+          <button
+            onClick={() => void removeFromLibrary(selected.hash).then(() => select(null))}
+            title={
+              track.sourceUrl
+                ? 'Tira da biblioteca e apaga o arquivo baixado'
+                : 'Tira da biblioteca; o arquivo continua no seu computador'
+            }
+          >
             Remover
+          </button>
+        </div>
+      )}
+      {folder && (
+        <div className="library-actions">
+          <span className="la-label">Playlist “{folder.name}”</span>
+          <button onClick={() => startNaming('rename')}>Renomear</button>
+          <button
+            className={confirmDelete ? 'danger' : undefined}
+            onClick={() =>
+              confirmDelete
+                ? void deletePlaylist(folder.id).then(() => select(null))
+                : setConfirmDelete(true)
+            }
+            title="As faixas continuam na biblioteca, fora das playlists"
+          >
+            {confirmDelete ? 'Confirmar: apagar' : 'Apagar playlist'}
           </button>
         </div>
       )}

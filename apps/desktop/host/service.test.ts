@@ -28,6 +28,7 @@ const dialogs: Dialogs = {
   pickProjectToSave: async () => answers.shift() as string,
   pickExportPath: async () => answers.shift() as string,
   locateTrack: async () => answers.shift() as string,
+  reveal: async (path) => void answers.push(`revelado:${path}`),
 }
 const service = createHostService(join(dir, 'dados'), dialogs)
 afterAll(() => service.close())
@@ -103,6 +104,14 @@ printf '{"filepath": "%s", "webpage_url": "https://soundcloud.com/a/b"}\n' "$tar
         ])
         const cover = await service.getCover(entries[0]?.hash ?? '')
         expect([...(cover ?? new Uint8Array()).subarray(0, 2)]).toEqual([0xff, 0xd8])
+
+        await service.revealTrack(entries[0]?.hash ?? '')
+        expect(answers.pop()).toBe(`revelado:${entries[0]?.path}`)
+        // Remover apaga o áudio baixado e a capa, mas não arquivos do usuário.
+        await service.removeFromLibrary(entries[0]?.hash ?? '')
+        expect(existsSync(entries[0]?.path ?? '')).toBe(false)
+        expect(existsSync(sidecar)).toBe(false)
+        expect(existsSync(source)).toBe(true)
       } finally {
         delete process.env.DJMIXER_YTDLP
       }
@@ -149,8 +158,46 @@ describe.skipIf(!hasFfmpeg)('capas', () => {
     const { entries } = await service.importFiles([plain, withArt])
     const [noCover, cover] = await Promise.all(entries.map((e) => service.getCover(e.hash)))
     expect(noCover).toBeNull()
-    expect(existsSync(join(dir, 'dados', 'cache', 'covers', `${entries[0]?.hash}.none`))).toBe(true)
+    expect(existsSync(join(dir, 'dados', 'cache', 'covers', `${entries[0]?.hash}.nocover`))).toBe(
+      true,
+    )
     expect([...(cover ?? new Uint8Array()).subarray(0, 2)]).toEqual([0xff, 0xd8])
+  })
+})
+
+describe.skipIf(!hasFfmpeg || process.platform === 'win32')('capa de download antigo', () => {
+  it('busca só a capa na página quando o download não trouxe', async () => {
+    // yt-dlp de mentira: com --skip-download, grava uma imagem no --output pedido.
+    const fake = join(dir, 'yt-dlp-capa')
+    writeFileSync(
+      fake,
+      `#!/bin/sh
+case "$*" in *--skip-download*) ;; *) exit 1 ;; esac
+while [ "$1" != "--output" ]; do shift; done
+target=$(echo "$2" | sed 's/%(ext)s/jpg/')
+ffmpeg -v error -f lavfi -i color=green:s=200x200 -frames:v 1 -y "$target"
+`,
+    )
+    chmodSync(fake, 0o755)
+    const audio = join(dir, 'dados', 'downloads', 'soundcloud-7.wav')
+    tone(audio, 4)
+    const library = new Library(join(dir, 'dados', 'library.sqlite'))
+    const { hashFile, probe } = await import('./media.ts')
+    const hash = await hashFile(audio)
+    library.upsert({
+      hash,
+      path: audio,
+      ...(await probe(audio)),
+      sourceUrl: 'https://soundcloud.com/x/y',
+    })
+    library.close()
+    process.env.DJMIXER_YTDLP = fake
+    try {
+      const cover = await service.getCover(hash)
+      expect([...(cover ?? new Uint8Array()).subarray(0, 2)]).toEqual([0xff, 0xd8])
+    } finally {
+      delete process.env.DJMIXER_YTDLP
+    }
   })
 })
 

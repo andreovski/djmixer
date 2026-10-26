@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Processo principal do Electron: abre a janela, serve a interface e o áudio por app:// e liga
 // os diálogos nativos ao host (host/service.ts). Toda a lógica de arquivos fica no host.
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
 import { extname, join, normalize } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { AUDIO_EXTENSIONS } from '../host/media.ts'
@@ -27,7 +27,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "img-src 'self' data: blob:",
   "worker-src 'self' blob:",
   "connect-src 'self' data:",
 ].join('; ')
@@ -41,11 +41,13 @@ const METHODS = [
   'importFiles',
   'importFromUrl',
   'listLibrary',
+  'revealTrack',
   'removeFromLibrary',
   'saveAnalysis',
   'saveEdits',
   'getPeaks',
   'getCover',
+  'getAudioInfo',
   'listPlaylists',
   'savePlaylist',
   'deletePlaylist',
@@ -115,6 +117,9 @@ const dialogs: Dialogs = {
       filters: [{ name: 'Áudio', extensions: AUDIO_EXTENSIONS }],
     })
     return result.canceled ? null : (result.filePaths[0] ?? null)
+  },
+  async reveal(path) {
+    shell.showItemInFolder(path)
   },
 }
 
