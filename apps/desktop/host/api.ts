@@ -125,6 +125,20 @@ export interface UrlImportResult {
   originals: string[]
 }
 
+/** Faixa achada na busca do SoundCloud, já conferida: tem um formato aberto (sem DRM nem prévia). */
+export interface SoundCloudResult {
+  id: string
+  title: string
+  artist: string
+  durationSeconds: number | null
+  /** Página da faixa, para baixar com `importFromUrl`. */
+  url: string
+  /** Capa (https, no CDN do SoundCloud), ou null. */
+  thumbnail: string | null
+  /** Bitrate do formato que seria baixado sem login. */
+  kbps: number | null
+}
+
 export interface HostApi {
   /** `web` é o servidor de desenvolvimento; `browser` é a versão web, sem servidor. */
   readonly kind: 'electron' | 'web' | 'browser'
@@ -137,6 +151,11 @@ export interface HostApi {
    * registra na biblioteca. Só existe no Electron e no servidor de desenvolvimento.
    */
   importFromUrl?(url: string, options?: UrlImportOptions): Promise<UrlImportResult>
+  /**
+   * Busca faixas no SoundCloud com o yt-dlp e devolve só as que dá para baixar: sem DRM e com o
+   * áudio inteiro (não só a prévia de 30 s). Só existe no Electron e no servidor de desenvolvimento.
+   */
+  searchSoundCloud?(query: string): Promise<SoundCloudResult[]>
   /** Situação do yt-dlp (ver host/ytdlp.ts). Só existe no Electron e no servidor de desenvolvimento. */
   ytDlpStatus?(): Promise<YtDlpStatus>
   listLibrary(): Promise<LibraryEntry[]>

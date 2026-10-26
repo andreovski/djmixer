@@ -363,6 +363,31 @@ button.danger {
   padding: 10px 12px;
   border-top: 1px solid var(--line);
 }
+.sc-results {
+  max-height: 45%;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--line);
+}
+.sc-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+.sc-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.sc-text > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-result button {
+  flex-shrink: 0;
+}
 .editor-button {
   display: inline-flex;
   align-items: center;

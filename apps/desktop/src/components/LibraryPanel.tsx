@@ -9,6 +9,7 @@ import {
   type AudioInfo,
   type CookieBrowser,
   type LibraryEntry,
+  type SoundCloudResult,
 } from '../../host/api.ts'
 import {
   addToGroup,
@@ -25,6 +26,7 @@ import {
   removeFromLibrary,
   renamePlaylist,
   revealTrack,
+  searchSoundCloud,
 } from '../actions.ts'
 import { host } from '../host.ts'
 import { entryGrid } from '../editing.ts'
@@ -130,6 +132,10 @@ export function LibraryPanel() {
   const [urlOpen, setUrlOpen] = useState(false)
   const [url, setUrl] = useState('')
   const [downloading, setDownloading] = useState(false)
+  // Busca do SoundCloud: resultados (null: nenhuma busca ainda) e faixa baixando (url).
+  const [results, setResults] = useState<SoundCloudResult[] | null>(null)
+  const [scSearching, setScSearching] = useState(false)
+  const [fetching, setFetching] = useState<string | null>(null)
   // Navegador com o login do SoundCloud, lembrado entre aberturas do app.
   const [browser, setBrowser] = useState<CookieBrowser | null>(savedBrowser)
   // Campo de nome aberto para criar ou renomear pasta.
@@ -179,17 +185,37 @@ export function LibraryPanel() {
     setOpen(next)
   }
 
+  // O campo aceita um link (baixa direto) ou um texto (busca no SoundCloud).
   const submitUrl = async (event: FormEvent) => {
     event.preventDefault()
-    if (!url.trim() || downloading) return
-    setDownloading(true)
-    const ok = await importFromUrl(url.trim(), browser)
-    setDownloading(false)
-    if (ok) {
-      setUrl('')
-      setUrlOpen(false)
+    const text = url.trim()
+    if (!text || downloading || scSearching) return
+    if (/^https?:\/\//i.test(text)) {
+      setDownloading(true)
+      const ok = await importFromUrl(text, browser)
+      setDownloading(false)
+      if (ok) {
+        setUrl('')
+        setUrlOpen(false)
+      }
+      return
     }
+    setScSearching(true)
+    setResults(await searchSoundCloud(text))
+    setScSearching(false)
   }
+
+  const fetchResult = async (result: SoundCloudResult) => {
+    if (fetching) return
+    setFetching(result.url)
+    await importFromUrl(result.url, browser)
+    setFetching(null)
+  }
+
+  const inLibrary = useMemo(
+    () => new Set(Object.values(library).map((entry) => entry.sourceUrl)),
+    [library],
+  )
 
   const startNaming = (mode: 'new' | 'rename') => {
     setNaming(mode)
@@ -312,7 +338,7 @@ export function LibraryPanel() {
         <div className="panel-buttons">
           {host.importFromUrl && (
             <button onClick={() => setUrlOpen(!urlOpen)} aria-expanded={urlOpen}>
-              De URL…
+              SoundCloud…
             </button>
           )}
           <button className="primary" onClick={() => void importTracks()}>
@@ -324,15 +350,25 @@ export function LibraryPanel() {
         <form className="inline-form" onSubmit={(event) => void submitUrl(event)}>
           <input
             id="import-url"
-            type="url"
-            placeholder="https://soundcloud.com/artista/faixa"
+            type="search"
+            placeholder="Buscar no SoundCloud ou colar um link"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            disabled={downloading}
+            disabled={downloading || scSearching}
             autoFocus
           />
-          <button type="submit" className="primary" disabled={downloading || !url.trim()}>
-            {downloading ? 'Baixando…' : 'Baixar'}
+          <button
+            type="submit"
+            className="primary"
+            disabled={downloading || scSearching || !url.trim()}
+          >
+            {downloading
+              ? 'Baixando…'
+              : scSearching
+                ? 'Buscando…'
+                : /^https?:\/\//i.test(url.trim())
+                  ? 'Baixar'
+                  : 'Buscar'}
           </button>
           <label className="url-login" htmlFor="soundcloud-browser">
             Login do SoundCloud
@@ -361,6 +397,51 @@ export function LibraryPanel() {
             </select>
           </label>
         </form>
+      )}
+      {urlOpen && scSearching && (
+        <p className="empty">Buscando e conferindo quais faixas dá para baixar…</p>
+      )}
+      {urlOpen && !scSearching && results && (
+        <div className="sc-results" aria-label="Resultados do SoundCloud">
+          {results.length === 0 && (
+            <p className="empty">
+              Nada que dê para baixar (faixas com DRM ou só prévia ficam de fora).
+            </p>
+          )}
+          {results.map((result) => {
+            const have = inLibrary.has(result.url)
+            return (
+              <div key={result.id} className="sc-result" data-testid="sc-result">
+                {result.thumbnail ? (
+                  <img className="li-cover" src={result.thumbnail} alt="" loading="lazy" />
+                ) : (
+                  <span className="li-cover li-cover-empty" aria-hidden="true" />
+                )}
+                <span className="sc-text">
+                  <span className="sc-title" title={result.title}>
+                    {result.title}
+                  </span>
+                  <span className="muted">
+                    {[
+                      result.artist,
+                      result.durationSeconds !== null && formatTimestamp(result.durationSeconds),
+                      result.kbps && `${result.kbps} kbps`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+                <button
+                  onClick={() => void fetchResult(result)}
+                  disabled={have || fetching !== null}
+                  title={have ? 'Já está na biblioteca' : 'Baixar para a biblioteca'}
+                >
+                  {have ? 'Na biblioteca' : fetching === result.url ? 'Baixando…' : 'Baixar'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
       )}
       <div className="inline-form">
         <input

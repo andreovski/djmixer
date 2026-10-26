@@ -27,7 +27,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://*.sndcdn.com",
   "worker-src 'self' blob:",
   "connect-src 'self' data:",
 ].join('; ')
@@ -40,6 +40,7 @@ const METHODS = [
   'pickAudioFiles',
   'importFiles',
   'importFromUrl',
+  'searchSoundCloud',
   'ytDlpStatus',
   'listLibrary',
   'revealTrack',

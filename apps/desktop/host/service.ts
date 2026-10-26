@@ -25,7 +25,7 @@ import {
   hashFile,
   probe,
 } from './media.ts'
-import { coverSidecar, downloadAudio, downloadThumbnail } from './url-import.ts'
+import { coverSidecar, downloadAudio, downloadThumbnail, searchSoundCloud } from './url-import.ts'
 import { createYtDlp } from './ytdlp.ts'
 
 export interface Dialogs {
@@ -47,6 +47,7 @@ export type HostService = Omit<
   | 'kind'
   | 'mediaUrl'
   | 'importFromUrl'
+  | 'searchSoundCloud'
   | 'getCover'
   | 'getAudioInfo'
   | 'revealTrack'
@@ -63,6 +64,7 @@ export type HostService = Omit<
   revealTrack: NonNullable<HostApi['revealTrack']>
   getAudioInfo: NonNullable<HostApi['getAudioInfo']>
   importFromUrl: NonNullable<HostApi['importFromUrl']>
+  searchSoundCloud: NonNullable<HostApi['searchSoundCloud']>
   getCover: NonNullable<HostApi['getCover']>
   /** Caminho do arquivo a servir para `mediaUrl`, decodificando se preciso; null se não existe. */
   mediaFile(kind: string, key: string): Promise<string | null>
@@ -172,6 +174,8 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
       }
       return { entries, errors, originals }
     },
+
+    searchSoundCloud: (query) => searchSoundCloud(query, () => ytDlp.ensure()),
 
     listLibrary: async () => library.list(),
     async removeFromLibrary(hash) {
