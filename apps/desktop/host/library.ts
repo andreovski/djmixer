@@ -3,7 +3,7 @@
 // da waveform. É a mesma para todos os projetos; o projeto guarda só caminho e hash.
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
-import type { LibraryEntry, TrackAnalysis, UserEdits } from './api.ts'
+import type { LibraryEntry, Playlist, TrackAnalysis, UserEdits } from './api.ts'
 
 interface Row {
   hash: string
@@ -44,6 +44,12 @@ export class Library {
         edits TEXT,
         peaks BLOB,
         imported_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS playlists (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        hashes TEXT NOT NULL,
+        created_at INTEGER NOT NULL
       );
     `)
     // Bibliotecas criadas antes do "Importar de URL" não têm a coluna da origem.
@@ -90,8 +96,34 @@ export class Library {
     return rows.map(toEntry)
   }
 
+  /** Tira a faixa da biblioteca e de todas as playlists. */
   remove(hash: string): void {
     this.db.prepare('DELETE FROM tracks WHERE hash = ?').run(hash)
+    for (const playlist of this.playlists()) {
+      if (playlist.hashes.includes(hash)) {
+        this.savePlaylist({ ...playlist, hashes: playlist.hashes.filter((h) => h !== hash) })
+      }
+    }
+  }
+
+  playlists(): Playlist[] {
+    const rows = this.db
+      .prepare('SELECT id, name, hashes FROM playlists ORDER BY created_at, name')
+      .all() as unknown as { id: string; name: string; hashes: string }[]
+    return rows.map((row) => ({ ...row, hashes: JSON.parse(row.hashes) as string[] }))
+  }
+
+  savePlaylist(playlist: Playlist): void {
+    this.db
+      .prepare(
+        `INSERT INTO playlists (id, name, hashes, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, hashes = excluded.hashes`,
+      )
+      .run(playlist.id, playlist.name, JSON.stringify(playlist.hashes), Date.now())
+  }
+
+  deletePlaylist(id: string): void {
+    this.db.prepare('DELETE FROM playlists WHERE id = ?').run(id)
   }
 
   setPath(hash: string, path: string): void {

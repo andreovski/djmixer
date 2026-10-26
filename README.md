@@ -52,7 +52,7 @@ A interface se adapta a tablet e celular, em retrato e deitado: em tela pequena 
 
 ### Usando o app
 
-1. **Importar…** na biblioteca e escolha arquivos de áudio, ou **De URL…** e cole o link de uma faixa ou playlist do SoundCloud (precisa do yt-dlp: `brew install yt-dlp`). A análise (BPM, tom em Camelot, waveform) roda em segundo plano. Faixas baixadas de URL aparecem com a marca URL e impedem o export do set (ver [docs/decisoes/0013](docs/decisoes/0013-importar-de-url.md)).
+1. **Importar…** na biblioteca e escolha arquivos de áudio, ou **De URL…** e cole o link de uma faixa ou playlist do SoundCloud (precisa do yt-dlp: `brew install yt-dlp`). A análise (BPM, tom em Camelot, waveform) roda em segundo plano. Faixas baixadas de URL aparecem com a marca URL e impedem o export do set (ver [docs/decisoes/0013](docs/decisoes/0013-importar-de-url.md)). A capa de cada faixa aparece na lista (no app desktop), e **+ Playlist** organiza a biblioteca em playlists; o seletor acima do filtro troca entre todas as faixas e uma playlist, e **Adicionar à playlist…** põe a faixa selecionada numa delas.
 2. Dois cliques numa faixa a põem no grupo selecionado; a segunda entra 8 compassos antes do fim da primeira, com uma transição Blend.
 3. Na linha do tempo, **Clips** move e apara os clips; **Automação** edita os pontos da lane escolhida em cada canal (volume, EQ grave, médio e agudo, filtro). Dois cliques apagam um ponto e o botão direito troca a curva.
 4. No painel de transições, escolha a janela e o preset e use **Ensaiar em loop** (ou a tecla L). Espaço toca o grupo a partir do cursor.
