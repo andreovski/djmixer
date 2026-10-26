@@ -24,6 +24,11 @@ export function findTool(name: Tool): string {
       ? override
       : join(dirname(override), basename(override).replace('ffmpeg', 'ffprobe'))
   }
+  return findSystemTool(name) ?? (process.platform === 'win32' ? `${name}.exe` : name)
+}
+
+/** Procura a ferramenta no PATH e nas pastas do Homebrew; null se não está instalada. */
+export function findSystemTool(name: Tool): string | null {
   const exe = process.platform === 'win32' ? `${name}.exe` : name
   const dirs = [
     ...(process.env.PATH ?? '').split(process.platform === 'win32' ? ';' : ':'),
@@ -32,18 +37,19 @@ export function findTool(name: Tool): string {
   for (const dir of dirs) {
     if (dir && existsSync(join(dir, exe))) return join(dir, exe)
   }
-  return exe
+  return null
 }
 
 const INSTALL_HINT: Record<Tool, string> = {
   ffmpeg: 'Instale o ffmpeg (brew install ffmpeg) ou defina DJMIXER_FFMPEG.',
   ffprobe: 'Instale o ffmpeg (brew install ffmpeg) ou defina DJMIXER_FFMPEG.',
-  'yt-dlp': 'Instale o yt-dlp (brew install yt-dlp) ou defina DJMIXER_YTDLP.',
+  'yt-dlp': 'O app instala o yt-dlp sozinho quando há internet; ou defina DJMIXER_YTDLP.',
 }
 
-export function run(tool: Tool, args: string[]): Promise<string> {
+/** Roda a ferramenta; `command` troca o executável achado por `findTool`. */
+export function run(tool: Tool, args: string[], command = findTool(tool)): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(findTool(tool), args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
     let err = ''
     child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()))
