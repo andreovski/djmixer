@@ -5,10 +5,11 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { open, readFile, rename, rm, writeFile, type FileHandle } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import type { ExportResult, ExportTarget, HostApi, LibraryEntry } from './api.ts'
+import type { ExportResult, ExportTarget, HostApi, LibraryEntry, YtDlpStatus } from './api.ts'
 import { Library } from './library.ts'
 import { decodeToCache, hashFile, probe } from './media.ts'
 import { downloadAudio } from './url-import.ts'
+import { createYtDlp } from './ytdlp.ts'
 
 export interface Dialogs {
   pickAudioFiles(): Promise<string[]>
@@ -18,10 +19,16 @@ export interface Dialogs {
   locateTrack(entry: LibraryEntry | null): Promise<string | null>
 }
 
-export type HostService = Omit<HostApi, 'kind' | 'mediaUrl' | 'importFromUrl'> & {
+export type HostService = Omit<HostApi, 'kind' | 'mediaUrl' | 'importFromUrl' | 'ytDlpStatus'> & {
   importFromUrl: NonNullable<HostApi['importFromUrl']>
   /** Caminho do arquivo a servir para `mediaUrl`, decodificando se preciso; null se não existe. */
   mediaFile(kind: string, key: string): Promise<string | null>
+  /**
+   * Confere se o yt-dlp existe e, se não, baixa o oficial para a pasta de dados. Roda em segundo
+   * plano na abertura do app; o "Importar de URL" espera por ele.
+   */
+  prepareTools(): void
+  ytDlpStatus(): Promise<YtDlpStatus>
   close(): void
 }
 
@@ -35,6 +42,7 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
   const downloadsDir = join(dataDir, 'downloads')
   for (const dir of [decodedDir, stretchedDir, downloadsDir]) mkdirSync(dir, { recursive: true })
   const library = new Library(join(dataDir, 'library.sqlite'))
+  const ytDlp = createYtDlp({ binDir: join(dataDir, 'bin') })
   const exports = new Map<string, { handle: FileHandle; path: string; bytes: number }>()
 
   const register = async (
@@ -72,7 +80,8 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
     async importFromUrl(url) {
       const entries: LibraryEntry[] = []
       const errors: string[] = []
-      for (const file of await downloadAudio(url.trim(), downloadsDir)) {
+      const files = await downloadAudio(url.trim(), downloadsDir, () => ytDlp.ensure())
+      for (const file of files) {
         try {
           entries.push(await register(file.path, undefined, file.pageUrl))
         } catch (error) {
@@ -188,6 +197,11 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
       await job.handle.close()
       await rm(job.path, { force: true })
     },
+
+    prepareTools() {
+      ytDlp.ensure().catch((error: unknown) => console.warn(String(error)))
+    },
+    ytDlpStatus: async () => ytDlp.status(),
 
     close: () => library.close(),
   }

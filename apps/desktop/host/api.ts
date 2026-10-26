@@ -64,6 +64,15 @@ export interface ExportResult {
   bytes: number
 }
 
+/**
+ * De onde vem o yt-dlp: `env` é DJMIXER_YTDLP, `system` é um já instalado (PATH, Homebrew) e
+ * `app` é o que o próprio app baixou para a pasta de dados.
+ */
+export type YtDlpStatus =
+  | { state: 'checking' | 'installing' }
+  | { state: 'ready'; path: string; source: 'env' | 'system' | 'app' }
+  | { state: 'error'; error: string }
+
 export interface HostApi {
   /** `web` é o servidor de desenvolvimento; `browser` é a versão web, sem servidor. */
   readonly kind: 'electron' | 'web' | 'browser'
@@ -76,6 +85,8 @@ export interface HostApi {
    * registra na biblioteca. Só existe no Electron e no servidor de desenvolvimento.
    */
   importFromUrl?(url: string): Promise<{ entries: LibraryEntry[]; errors: string[] }>
+  /** Situação do yt-dlp (ver host/ytdlp.ts). Só existe no Electron e no servidor de desenvolvimento. */
+  ytDlpStatus?(): Promise<YtDlpStatus>
   listLibrary(): Promise<LibraryEntry[]>
   removeFromLibrary(hash: string): Promise<void>
   saveAnalysis(hash: string, analysis: TrackAnalysis, peaks: Uint8Array): Promise<void>

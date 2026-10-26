@@ -64,8 +64,14 @@ export async function importTracks(): Promise<void> {
 /** Baixa com o yt-dlp do host (ver host/url-import.ts). Devolve se importou alguma faixa. */
 export async function importFromUrl(url: string): Promise<boolean> {
   if (!host.importFromUrl) return false
-  state().notify('info', `Baixando ${url}...`)
   try {
+    // Na primeira vez o host ainda pode estar baixando o yt-dlp (ver host/ytdlp.ts).
+    const tool = await host.ytDlpStatus?.()
+    const installing = tool?.state === 'installing' || tool?.state === 'checking'
+    state().notify(
+      'info',
+      installing ? `Instalando o yt-dlp e baixando ${url}...` : `Baixando ${url}...`,
+    )
     const { entries, errors } = await host.importFromUrl(url)
     putEntries(entries)
     if (errors.length) state().notify('error', `Não importados: ${errors.join('; ')}`)
