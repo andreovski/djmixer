@@ -56,6 +56,14 @@ button.primary {
 input[type='number'] {
   width: 84px;
 }
+.bpm-field {
+  width: 84px;
+  font-variant-numeric: tabular-nums;
+}
+.bpm-field[aria-invalid='true'] {
+  border-color: #c0504d;
+  outline-color: #c0504d;
+}
 input[type='checkbox'] {
   padding: 0;
   margin: 0 4px 0 0;
