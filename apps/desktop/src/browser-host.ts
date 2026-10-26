@@ -7,6 +7,7 @@ import {
   type ExportResult,
   type HostApi,
   type LibraryEntry,
+  type Playlist,
   type TrackAnalysis,
   type UserEdits,
 } from '../host/api.ts'
@@ -27,14 +28,20 @@ const DB_NAME = 'djmixer'
 const TRACKS = 'tracks'
 const PEAKS = 'peaks'
 const STRETCHED = 'stretched'
+const PLAYLISTS = 'playlists'
 
 let database: Promise<IDBDatabase> | undefined
 
 function db(): Promise<IDBDatabase> {
   database ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
+    // Versão 2: playlists.
+    const request = indexedDB.open(DB_NAME, 2)
     request.onupgradeneeded = () => {
-      for (const store of [TRACKS, PEAKS, STRETCHED]) request.result.createObjectStore(store)
+      for (const store of [TRACKS, PEAKS, STRETCHED, PLAYLISTS]) {
+        if (!request.result.objectStoreNames.contains(store)) {
+          request.result.createObjectStore(store)
+        }
+      }
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error('IndexedDB indisponível'))
@@ -198,7 +205,36 @@ export function createBrowserHost(): HostApi {
     async removeFromLibrary(hash) {
       await remove(TRACKS, hash)
       await remove(PEAKS, hash)
+      const playlists = await run<Playlist[]>(PLAYLISTS, 'readonly', (s) => s.getAll())
+      for (const playlist of playlists) {
+        if (!playlist.hashes.includes(hash)) continue
+        await put(PLAYLISTS, playlist.id, {
+          ...playlist,
+          hashes: playlist.hashes.filter((h) => h !== hash),
+        })
+      }
     },
+
+    async listPlaylists() {
+      const playlists = await run<(Playlist & { createdAt?: number })[]>(
+        PLAYLISTS,
+        'readonly',
+        (s) => s.getAll(),
+      )
+      return playlists
+        .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+        .map(({ id, name, hashes }) => ({ id, name, hashes }))
+    },
+
+    async savePlaylist(playlist) {
+      const existing = await get<{ createdAt?: number }>(PLAYLISTS, playlist.id)
+      await put(PLAYLISTS, playlist.id, {
+        ...playlist,
+        createdAt: existing?.createdAt ?? Date.now(),
+      })
+    },
+
+    deletePlaylist: (id) => remove(PLAYLISTS, id).then(() => undefined),
 
     async saveAnalysis(hash, analysis, peaks) {
       await update(hash, { analysis })

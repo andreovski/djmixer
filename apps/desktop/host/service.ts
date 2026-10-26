@@ -2,13 +2,13 @@
 // Implementação do host sem nada do Electron: o processo principal e o servidor de
 // desenvolvimento a embrulham, cada um com seus diálogos e seu transporte.
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { open, readFile, rename, rm, writeFile, type FileHandle } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { ExportResult, ExportTarget, HostApi, LibraryEntry } from './api.ts'
 import { Library } from './library.ts'
-import { decodeToCache, hashFile, probe } from './media.ts'
-import { downloadAudio } from './url-import.ts'
+import { decodeToCache, extractCover, hashFile, probe } from './media.ts'
+import { coverSidecar, downloadAudio } from './url-import.ts'
 
 export interface Dialogs {
   pickAudioFiles(): Promise<string[]>
@@ -18,8 +18,9 @@ export interface Dialogs {
   locateTrack(entry: LibraryEntry | null): Promise<string | null>
 }
 
-export type HostService = Omit<HostApi, 'kind' | 'mediaUrl' | 'importFromUrl'> & {
+export type HostService = Omit<HostApi, 'kind' | 'mediaUrl' | 'importFromUrl' | 'getCover'> & {
   importFromUrl: NonNullable<HostApi['importFromUrl']>
+  getCover: NonNullable<HostApi['getCover']>
   /** Caminho do arquivo a servir para `mediaUrl`, decodificando se preciso; null se não existe. */
   mediaFile(kind: string, key: string): Promise<string | null>
   close(): void
@@ -33,7 +34,9 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
   const decodedDir = join(dataDir, 'cache', 'decoded')
   const stretchedDir = join(dataDir, 'cache', 'stretched')
   const downloadsDir = join(dataDir, 'downloads')
-  for (const dir of [decodedDir, stretchedDir, downloadsDir]) mkdirSync(dir, { recursive: true })
+  const coversDir = join(dataDir, 'cache', 'covers')
+  for (const dir of [decodedDir, stretchedDir, downloadsDir, coversDir])
+    mkdirSync(dir, { recursive: true })
   const library = new Library(join(dataDir, 'library.sqlite'))
   const exports = new Map<string, { handle: FileHandle; path: string; bytes: number }>()
 
@@ -90,6 +93,26 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
     saveAnalysis: async (hash, analysis, peaks) => library.saveAnalysis(hash, analysis, peaks),
     saveEdits: async (hash, edits) => library.saveEdits(hash, edits),
     getPeaks: async (hash) => library.peaks(hash),
+
+    async getCover(hash) {
+      if (!SAFE_KEY.test(hash)) return null
+      const file = join(coversDir, `${hash}.jpg`)
+      // Faixa sem capa: um arquivo vazio evita procurar de novo a cada abertura.
+      const none = join(coversDir, `${hash}.none`)
+      if (!existsSync(file)) {
+        const entry = library.get(hash)
+        if (!entry || entry.missing || existsSync(none)) return null
+        if (!(await extractCover([coverSidecar(entry.path), entry.path], file))) {
+          writeFileSync(none, '')
+          return null
+        }
+      }
+      return new Uint8Array(await readFile(file))
+    },
+
+    listPlaylists: async () => library.playlists(),
+    savePlaylist: async (playlist) => library.savePlaylist(playlist),
+    deletePlaylist: async (id) => library.deletePlaylist(id),
 
     async resolveTracks(tracks) {
       return Promise.all(
