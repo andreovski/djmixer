@@ -4,7 +4,12 @@
 // desktop), ver capa, BPM, tom (Camelot), qualidade do arquivo e estado da análise, e mandar uma
 // faixa para o grupo selecionado.
 import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from 'react'
-import type { AudioInfo, LibraryEntry } from '../../host/api.ts'
+import {
+  COOKIE_BROWSERS,
+  type AudioInfo,
+  type CookieBrowser,
+  type LibraryEntry,
+} from '../../host/api.ts'
 import {
   addToGroup,
   createPlaylist,
@@ -31,6 +36,29 @@ const LOOSE = '__solta__'
 const NEW_PLAYLIST = '__nova__'
 /** Tipo do dado arrastado: o hash da faixa. */
 const DRAG_TYPE = 'application/x-djmixer-track'
+
+const BROWSER_NAMES: Record<CookieBrowser, string> = {
+  chrome: 'Chrome',
+  safari: 'Safari',
+  firefox: 'Firefox',
+  brave: 'Brave',
+  edge: 'Edge',
+  chromium: 'Chromium',
+  opera: 'Opera',
+  vivaldi: 'Vivaldi',
+}
+const BROWSER_KEY = 'djmixer.soundcloudBrowser'
+
+function savedBrowser(): CookieBrowser | null {
+  try {
+    const value = localStorage.getItem(BROWSER_KEY)
+    return (COOKIE_BROWSERS as readonly string[]).includes(value ?? '')
+      ? (value as CookieBrowser)
+      : null
+  } catch {
+    return null
+  }
+}
 
 type Selection = { kind: 'track'; hash: string } | { kind: 'folder'; id: string } | null
 
@@ -99,6 +127,8 @@ export function LibraryPanel() {
   const [urlOpen, setUrlOpen] = useState(false)
   const [url, setUrl] = useState('')
   const [downloading, setDownloading] = useState(false)
+  // Navegador com o login do SoundCloud, lembrado entre aberturas do app.
+  const [browser, setBrowser] = useState<CookieBrowser | null>(savedBrowser)
   // Campo de nome aberto para criar ou renomear pasta.
   const [naming, setNaming] = useState<'new' | 'rename' | null>(null)
   const [name, setName] = useState('')
@@ -138,7 +168,7 @@ export function LibraryPanel() {
     event.preventDefault()
     if (!url.trim() || downloading) return
     setDownloading(true)
-    const ok = await importFromUrl(url.trim())
+    const ok = await importFromUrl(url.trim(), browser)
     setDownloading(false)
     if (ok) {
       setUrl('')
@@ -289,6 +319,32 @@ export function LibraryPanel() {
           <button type="submit" className="primary" disabled={downloading || !url.trim()}>
             {downloading ? 'Baixando…' : 'Baixar'}
           </button>
+          <label className="url-login" htmlFor="soundcloud-browser">
+            Login do SoundCloud
+            <select
+              id="soundcloud-browser"
+              value={browser ?? ''}
+              disabled={downloading}
+              onChange={(e) => {
+                const value = (e.target.value || null) as CookieBrowser | null
+                setBrowser(value)
+                try {
+                  if (value) localStorage.setItem(BROWSER_KEY, value)
+                  else localStorage.removeItem(BROWSER_KEY)
+                } catch {
+                  // Sem armazenamento: vale só até fechar o app.
+                }
+              }}
+              title="Com o login, o SoundCloud entrega o arquivo original quando o artista libera download"
+            >
+              <option value="">sem login</option>
+              {COOKIE_BROWSERS.map((name) => (
+                <option key={name} value={name}>
+                  {BROWSER_NAMES[name]}
+                </option>
+              ))}
+            </select>
+          </label>
         </form>
       )}
       <div className="inline-form">

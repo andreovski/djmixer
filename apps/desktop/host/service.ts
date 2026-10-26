@@ -93,13 +93,16 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
       return { entries, errors }
     },
 
-    async importFromUrl(url) {
+    async importFromUrl(url, options) {
       const entries: LibraryEntry[] = []
       const errors: string[] = []
-      const files = await downloadAudio(url.trim(), downloadsDir, () => ytDlp.ensure())
+      const originals: string[] = []
+      const files = await downloadAudio(url.trim(), downloadsDir, () => ytDlp.ensure(), options)
       for (const file of files) {
         try {
-          entries.push(await register(file.path, undefined, file.pageUrl))
+          const entry = await register(file.path, undefined, file.pageUrl)
+          entries.push(entry)
+          if (file.original) originals.push(entry.hash)
         } catch (error) {
           errors.push(`${file.pageUrl}: ${error instanceof Error ? error.message : String(error)}`)
         }
@@ -107,7 +110,7 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
       if (entries.length === 0 && errors.length === 0) {
         errors.push('nenhum áudio encontrado nesse endereço')
       }
-      return { entries, errors }
+      return { entries, errors, originals }
     },
 
     listLibrary: async () => library.list(),

@@ -3,12 +3,15 @@
 // com o yt-dlp (do sistema ou instalado pelo app, ver host/ytdlp.ts), para uso pessoal (docs/decisoes/0013). O yt-dlp recusa conteúdo com
 // DRM, então serviços como Spotify e as faixas Go+ do SoundCloud ficam de fora.
 import { dirname, isAbsolute } from 'node:path'
+import { COOKIE_BROWSERS, type UrlImportOptions } from './api.ts'
 import { findTool, run } from './media.ts'
 
 export interface DownloadedFile {
   path: string
   /** Página da faixa (numa playlist, a de cada faixa, não a da playlist). */
   pageUrl: string
+  /** Veio o arquivo que o artista enviou (download liberado), não o stream. */
+  original: boolean
 }
 
 export function isHttpUrl(text: string): boolean {
@@ -29,8 +32,13 @@ export async function downloadAudio(
   dir: string,
   /** Caminho do yt-dlp, instalado se preciso (ver host/ytdlp.ts). */
   ytDlp: () => Promise<string>,
+  options: UrlImportOptions = {},
 ): Promise<DownloadedFile[]> {
   if (!isHttpUrl(url)) throw new Error('Cole um endereço que comece com https://')
+  const browser = options.browser ?? null
+  if (browser && !(COOKIE_BROWSERS as readonly string[]).includes(browser)) {
+    throw new Error(`navegador desconhecido: ${browser}`)
+  }
   const ytDlpPath = await ytDlp()
   const ffmpeg = findTool('ffmpeg')
   const out = await run(
@@ -39,8 +47,11 @@ export async function downloadAudio(
       '--no-progress',
       '--no-warnings',
       '--yes-playlist',
+      // O yt-dlp já prefere o original do artista (formato "download") quando existe; sem login,
+      // o SoundCloud costuma negá-lo e sobra o melhor stream.
       '--format',
       'bestaudio/best',
+      ...(browser ? ['--cookies-from-browser', browser] : []),
       '--embed-metadata',
       // A capa fica ao lado do áudio, com o mesmo nome e extensão .jpg (ver coverSidecar).
       '--write-thumbnail',
@@ -53,7 +64,7 @@ export async function downloadAudio(
       // --print sozinho só simula; --no-simulate faz baixar e imprimir.
       '--no-simulate',
       '--print',
-      'after_move:%(.{filepath,webpage_url})j',
+      'after_move:%(.{filepath,webpage_url,format_id})j',
       '--',
       url,
     ],
@@ -63,9 +74,17 @@ export async function downloadAudio(
     .split('\n')
     .filter((line) => line.startsWith('{'))
     .map((line) => {
-      const info = JSON.parse(line) as { filepath?: string; webpage_url?: string }
+      const info = JSON.parse(line) as {
+        filepath?: string
+        webpage_url?: string
+        format_id?: string
+      }
       if (!info.filepath) throw new Error('o yt-dlp não informou o arquivo baixado')
-      return { path: info.filepath, pageUrl: info.webpage_url ?? url }
+      return {
+        path: info.filepath,
+        pageUrl: info.webpage_url ?? url,
+        original: info.format_id === 'download',
+      }
     })
 }
 

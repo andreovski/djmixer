@@ -167,9 +167,20 @@ label {
   gap: 6px;
   margin: 0 12px 8px;
 }
+.inline-form {
+  flex-wrap: wrap;
+}
 .inline-form input {
   flex: 1;
   min-width: 0;
+}
+.url-login {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .library-folder {
   display: flex;

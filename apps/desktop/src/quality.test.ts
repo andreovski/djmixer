@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from 'vitest'
-import { describeAudio } from './quality.ts'
+import { describeAudio, downloadSummary } from './quality.ts'
 
 describe('qualidade da faixa', () => {
   it('descreve um AAC baixado do SoundCloud', () => {
@@ -44,5 +44,17 @@ describe('qualidade da faixa', () => {
         estimated: true,
       }),
     ).toEqual(['MP3', '~320 kbps', '1,0 MB'])
+  })
+})
+
+describe('resumo do download', () => {
+  it('diz quantas vieram no original e sugere o login quando falta', () => {
+    expect(downloadSummary(2, 2, false)).toBe(
+      '2 faixa(s) baixada(s) no arquivo original do artista.',
+    )
+    expect(downloadSummary(1, 0, false)).toContain('Login do SoundCloud')
+    expect(downloadSummary(3, 1, true)).toBe(
+      '3 faixa(s) baixada(s): 1 no original e 2 no stream (o artista não liberou download, então veio o stream do SoundCloud.)',
+    )
   })
 })

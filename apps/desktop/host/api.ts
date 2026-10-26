@@ -97,6 +97,34 @@ export type YtDlpStatus =
   | { state: 'ready'; path: string; source: 'env' | 'system' | 'app' }
   | { state: 'error'; error: string }
 
+/** Navegadores de onde o yt-dlp sabe ler cookies (--cookies-from-browser). */
+export const COOKIE_BROWSERS = [
+  'chrome',
+  'safari',
+  'firefox',
+  'brave',
+  'edge',
+  'chromium',
+  'opera',
+  'vivaldi',
+] as const
+export type CookieBrowser = (typeof COOKIE_BROWSERS)[number]
+
+export interface UrlImportOptions {
+  /**
+   * Usa o login do SoundCloud feito neste navegador. Com login, o SoundCloud entrega o arquivo
+   * original quando o artista libera download; sem, só o stream.
+   */
+  browser?: CookieBrowser | null
+}
+
+export interface UrlImportResult {
+  entries: LibraryEntry[]
+  errors: string[]
+  /** Hashes das faixas que vieram no arquivo original do artista, não no stream. */
+  originals: string[]
+}
+
 export interface HostApi {
   /** `web` é o servidor de desenvolvimento; `browser` é a versão web, sem servidor. */
   readonly kind: 'electron' | 'web' | 'browser'
@@ -108,7 +136,7 @@ export interface HostApi {
    * Baixa o áudio de uma página (faixa ou playlist do SoundCloud, por exemplo) com o yt-dlp e
    * registra na biblioteca. Só existe no Electron e no servidor de desenvolvimento.
    */
-  importFromUrl?(url: string): Promise<{ entries: LibraryEntry[]; errors: string[] }>
+  importFromUrl?(url: string, options?: UrlImportOptions): Promise<UrlImportResult>
   /** Situação do yt-dlp (ver host/ytdlp.ts). Só existe no Electron e no servidor de desenvolvimento. */
   ytDlpStatus?(): Promise<YtDlpStatus>
   listLibrary(): Promise<LibraryEntry[]>

@@ -7,7 +7,7 @@ import {
   type Beatgrid,
   type Cue,
 } from '@djmixer/shared'
-import type { LibraryEntry, Playlist, UserEdits } from '../host/api.ts'
+import type { CookieBrowser, LibraryEntry, Playlist, UserEdits } from '../host/api.ts'
 import { decodedPcm, errorText, exportSet, stop } from './audio.ts'
 import {
   addTrackToGroup,
@@ -18,6 +18,7 @@ import {
 } from './editing.ts'
 import { host } from './host.ts'
 import { moveTrack, uniqueName } from './playlists.ts'
+import { downloadSummary } from './quality.ts'
 import { currentGroup, useApp } from './store.ts'
 import type { AnalysisRequest, AnalysisResponse } from './workers/analysis.worker.ts'
 
@@ -64,7 +65,7 @@ export async function importTracks(): Promise<void> {
 }
 
 /** Baixa com o yt-dlp do host (ver host/url-import.ts). Devolve se importou alguma faixa. */
-export async function importFromUrl(url: string): Promise<boolean> {
+export async function importFromUrl(url: string, browser: CookieBrowser | null): Promise<boolean> {
   if (!host.importFromUrl) return false
   try {
     // Na primeira vez o host ainda pode estar baixando o yt-dlp (ver host/ytdlp.ts).
@@ -74,10 +75,10 @@ export async function importFromUrl(url: string): Promise<boolean> {
       'info',
       installing ? `Instalando o yt-dlp e baixando ${url}...` : `Baixando ${url}...`,
     )
-    const { entries, errors } = await host.importFromUrl(url)
+    const { entries, errors, originals } = await host.importFromUrl(url, { browser })
     putEntries(entries)
     if (errors.length) state().notify('error', `Não importados: ${errors.join('; ')}`)
-    else state().notify('info', `${entries.length} faixa(s) baixada(s).`)
+    else state().notify('info', downloadSummary(entries.length, originals.length, browser !== null))
     queueAnalysis(entries.filter((entry) => !entry.analysis))
     for (const entry of entries) if (entry.analysis) void loadPeaks(entry.hash)
     return entries.length > 0

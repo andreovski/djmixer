@@ -38,3 +38,15 @@ export function describeAudio(info: AudioInfo): string[] {
   parts.push(`${decimal(info.bytes / 1024 / 1024, 1)} MB`)
   return parts
 }
+
+/** Mensagem depois do download: quantas vieram no arquivo original e quantas no stream. */
+export function downloadSummary(total: number, originals: number, loggedIn: boolean): string {
+  const streams = total - originals
+  if (streams === 0) return `${total} faixa(s) baixada(s) no arquivo original do artista.`
+  const hint = loggedIn
+    ? 'o artista não liberou download, então veio o stream do SoundCloud.'
+    : 'veio o stream do SoundCloud; escolha seu navegador em "Login do SoundCloud" para tentar o arquivo original.'
+  return originals
+    ? `${total} faixa(s) baixada(s): ${originals} no original e ${streams} no stream (${hint})`
+    : `${total} faixa(s) baixada(s): ${hint}`
+}

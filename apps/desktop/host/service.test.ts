@@ -69,18 +69,33 @@ describe.skipIf(!hasFfmpeg)('host com ffmpeg', () => {
       writeFileSync(
         fake,
         `#!/bin/sh
+# Com login (--cookies-from-browser), finge que veio o original do artista.
+format=hls_aac_160k
+case "$*" in *"--cookies-from-browser safari"*) format=download ;; esac
 while [ "$1" != "--output" ]; do shift; done
 target=$(echo "$2" | sed 's/%(extractor)s-%(id)s.%(ext)s/soundcloud-42.wav/')
 cp '${source}' "$target"
 echo "[download] Destination: $target"
-printf '{"filepath": "%s", "webpage_url": "https://soundcloud.com/a/b"}\n' "$target"
+printf '{"filepath": "%s", "webpage_url": "https://soundcloud.com/a/b", "format_id": "%s"}\n' "$target" "$format"
 `,
       )
       chmodSync(fake, 0o755)
       process.env.DJMIXER_YTDLP = fake
       try {
-        const { entries, errors } = await service.importFromUrl('https://soundcloud.com/a/b')
+        const { entries, errors, originals } = await service.importFromUrl(
+          'https://soundcloud.com/a/b',
+        )
         expect(errors).toEqual([])
+        expect(originals).toEqual([])
+        const withLogin = await service.importFromUrl('https://soundcloud.com/a/b', {
+          browser: 'safari',
+        })
+        expect(withLogin.originals).toEqual([entries[0]?.hash])
+        await expect(
+          service.importFromUrl('https://soundcloud.com/a/b', {
+            browser: 'netscape' as 'safari',
+          }),
+        ).rejects.toThrow('navegador desconhecido')
         expect(entries[0]).toMatchObject({
           title: 'soundcloud-42',
           sourceUrl: 'https://soundcloud.com/a/b',
