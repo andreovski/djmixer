@@ -4,7 +4,7 @@ import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { downloadAudio } from './url-import.ts'
+import { downloadAudio, searchSoundCloud } from './url-import.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'djmixer-url-'))
 const fake = join(dir, 'yt-dlp')
@@ -19,6 +19,12 @@ case "$*" in *--cookies-from-browser*) login=yes ;; esac
 for target; do :; done
 ok() { printf '{"filepath": "${dir}/%s.m4a", "webpage_url": "https://soundcloud.com/a/%s", "format_id": "hls_aac_160k"}\\n' "$1" "$1"; }
 case "$login:$target" in
+  *:scsearch15:rede) echo "ERROR: [soundcloud:search] Unable to download webpage: offline" >&2; exit 1 ;;
+  *:scsearch15:*)
+    echo '{"id": 1, "title": "Aberta", "uploader": "DJ", "duration": 300.5, "webpage_url": "https://soundcloud.com/dj/aberta", "thumbnail": "https://i1.sndcdn.com/a.jpg", "abr": 160}'
+    echo "ERROR: [soundcloud] 2: This video is DRM protected" >&2
+    echo '{"id": 3, "title": "Sem capa", "uploader": "DJ", "webpage_url": "https://soundcloud.com/dj/sem-capa", "thumbnail": "http://x/a.jpg"}'
+    exit 1 ;;
   yes:*drm-only) echo "ERROR: [soundcloud] 99: This video is DRM protected" >&2; exit 1 ;;
   yes:*preview-only) echo "ERROR: [soundcloud] 98: This video is DRM protected" >&2; exit 1 ;;
   no:*/tracks/99) ok 99 ;;
@@ -50,5 +56,35 @@ describe.skipIf(process.platform === 'win32')('downloadAudio', () => {
     const result = await downloadAudio('https://soundcloud.com/a/sets/playlist', dir, ytDlp)
     expect(result.files).toHaveLength(1)
     expect(result.errors).toEqual([expect.stringMatching(/^faixa 97: só existe protegida por DRM/)])
+  })
+})
+
+describe.skipIf(process.platform === 'win32')('searchSoundCloud', () => {
+  it('lista só as faixas que dá para baixar', async () => {
+    expect(await searchSoundCloud('  techno   minimal ', ytDlp)).toEqual([
+      {
+        id: '1',
+        title: 'Aberta',
+        artist: 'DJ',
+        durationSeconds: 300.5,
+        url: 'https://soundcloud.com/dj/aberta',
+        thumbnail: 'https://i1.sndcdn.com/a.jpg',
+        kbps: 160,
+      },
+      {
+        id: '3',
+        title: 'Sem capa',
+        artist: 'DJ',
+        durationSeconds: null,
+        url: 'https://soundcloud.com/dj/sem-capa',
+        thumbnail: null,
+        kbps: null,
+      },
+    ])
+    expect(await searchSoundCloud('   ', ytDlp)).toEqual([])
+  })
+
+  it('mostra o erro quando a busca em si falha', async () => {
+    await expect(searchSoundCloud('rede', ytDlp)).rejects.toThrow('Unable to download webpage')
   })
 })

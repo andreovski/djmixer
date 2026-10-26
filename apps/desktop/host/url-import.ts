@@ -3,7 +3,7 @@
 // com o yt-dlp (do sistema ou instalado pelo app, ver host/ytdlp.ts), para uso pessoal (docs/decisoes/0013). O yt-dlp recusa conteúdo com
 // DRM, então serviços como Spotify e as faixas Go+ do SoundCloud ficam de fora.
 import { dirname, isAbsolute } from 'node:path'
-import { COOKIE_BROWSERS, type UrlImportOptions } from './api.ts'
+import { COOKIE_BROWSERS, type SoundCloudResult, type UrlImportOptions } from './api.ts'
 import { findTool, run, runResult } from './media.ts'
 
 export interface DownloadedFile {
@@ -70,7 +70,7 @@ export async function downloadAudio(
         // O yt-dlp já prefere o original do artista (formato "download") quando existe; sem login,
         // o SoundCloud costuma negá-lo e sobra o melhor stream. Prévias de 30 s não servem.
         '--format',
-        'bestaudio[format_id!*=preview]/best[format_id!*=preview]',
+        AUDIO_FORMAT,
         ...(withLogin && browser ? ['--cookies-from-browser', browser] : []),
         '--embed-metadata',
         // A capa fica ao lado do áudio, com o mesmo nome e extensão .jpg (ver coverSidecar).
@@ -162,6 +162,73 @@ function explain({ id, message }: ItemError): string {
     return `${which}: o SoundCloud só oferece uma prévia de 30 s (faixa exclusiva do Go+), que o app não importa.`
   }
   return `${which}: ${message}`
+}
+
+/** Formato que o "Importar de URL" escolhe: o melhor áudio, nunca a prévia de 30 s. */
+const AUDIO_FORMAT = 'bestaudio[format_id!*=preview]/best[format_id!*=preview]'
+
+/** Quantos resultados a busca confere (cada um custa algumas chamadas ao SoundCloud). */
+export const SEARCH_LIMIT = 15
+
+/**
+ * Busca no SoundCloud (`scsearch` do yt-dlp) sem login. O yt-dlp resolve os formatos de cada
+ * resultado sem baixar: faixas só com DRM ou só com prévia dão erro na escolha do formato e, com
+ * --ignore-errors, ficam de fora da lista.
+ */
+export async function searchSoundCloud(
+  query: string,
+  ytDlp: () => Promise<string>,
+  limit = SEARCH_LIMIT,
+): Promise<SoundCloudResult[]> {
+  const text = query.replace(/\s+/g, ' ').trim()
+  if (!text) return []
+  const { code, out, err } = await runResult(
+    'yt-dlp',
+    [
+      '--no-warnings',
+      '--ignore-errors',
+      // Só confere os streams abertos mais comuns (cada formato é uma chamada a mais por faixa).
+      '--extractor-args',
+      'soundcloud:formats=hls_aac,http_mp3,hls_mp3',
+      '--format',
+      AUDIO_FORMAT,
+      // --print sem --no-simulate: escolhe o formato e imprime, sem baixar nada.
+      '--print',
+      '%(.{id,title,uploader,duration,webpage_url,thumbnail,abr})j',
+      '--',
+      `scsearch${limit}:${text}`,
+    ],
+    await ytDlp(),
+  )
+  const results = out
+    .split('\n')
+    .filter((line) => line.startsWith('{'))
+    .map((line) => {
+      const info = JSON.parse(line) as {
+        id?: string | number
+        title?: string
+        uploader?: string
+        duration?: number
+        webpage_url?: string
+        thumbnail?: string
+        abr?: number
+      }
+      return {
+        id: String(info.id ?? ''),
+        title: info.title ?? '',
+        artist: info.uploader ?? '',
+        durationSeconds: typeof info.duration === 'number' ? info.duration : null,
+        url: info.webpage_url ?? '',
+        thumbnail: info.thumbnail && /^https:\/\//.test(info.thumbnail) ? info.thumbnail : null,
+        kbps: typeof info.abr === 'number' ? Math.round(info.abr) : null,
+      }
+    })
+    .filter((result) => isHttpUrl(result.url))
+  // Sem resultado e com erro que não é de uma faixa (rede, yt-dlp quebrado): mostra o erro.
+  if (results.length === 0 && code !== 0 && !itemErrors(err).some((e) => e.id)) {
+    throw new Error(`yt-dlp saiu com código ${code}: ${err.trim().slice(-2000)}`)
+  }
+  return results
 }
 
 /** Caminho da capa que o yt-dlp grava ao lado de um áudio baixado. */

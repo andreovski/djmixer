@@ -7,7 +7,13 @@ import {
   type Beatgrid,
   type Cue,
 } from '@djmixer/shared'
-import type { CookieBrowser, LibraryEntry, Playlist, UserEdits } from '../host/api.ts'
+import type {
+  CookieBrowser,
+  LibraryEntry,
+  Playlist,
+  SoundCloudResult,
+  UserEdits,
+} from '../host/api.ts'
 import { decodedPcm, errorText, exportSet, stop } from './audio.ts'
 import {
   addTrackToGroup,
@@ -63,6 +69,19 @@ export async function importTracks(): Promise<void> {
   else state().set({ notice: null })
   queueAnalysis(entries.filter((entry) => !entry.analysis))
   for (const entry of entries) if (entry.analysis) void loadPeaks(entry.hash)
+}
+
+/** Busca no SoundCloud só faixas baixáveis (sem DRM nem prévia); null se falhou. */
+export async function searchSoundCloud(query: string): Promise<SoundCloudResult[] | null> {
+  if (!host.searchSoundCloud) return null
+  try {
+    const results = await host.searchSoundCloud(query)
+    state().set({ notice: null })
+    return results
+  } catch (error) {
+    state().notify('error', `Busca falhou: ${errorText(error)}`)
+    return null
+  }
 }
 
 /** Baixa com o yt-dlp do host (ver host/url-import.ts). Devolve se importou alguma faixa. */
