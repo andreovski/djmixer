@@ -53,6 +53,23 @@ export interface LibraryEntry {
   sourceUrl?: string
 }
 
+/** Qualidade do arquivo de áudio, como está no disco (antes de decodificar). */
+export interface AudioInfo {
+  /** Contêiner, como o ffprobe o chama (mp3, mov,mp4,m4a, flac, wav...). */
+  container: string
+  /** Codec do áudio (mp3, aac, flac, pcm_s16le...). */
+  codec: string
+  bitrateKbps: number | null
+  sampleRate: number | null
+  /** Bits por amostra; só formatos sem perdas informam. */
+  bitDepth: number | null
+  channels: number | null
+  bytes: number
+  lossless: boolean
+  /** O bitrate foi estimado por tamanho e duração (versão web). */
+  estimated?: boolean
+}
+
 /** Playlist da biblioteca: um nome e as faixas (por hash), na ordem em que foram adicionadas. */
 export interface Playlist {
   id: string
@@ -95,6 +112,12 @@ export interface HostApi {
   /** Situação do yt-dlp (ver host/ytdlp.ts). Só existe no Electron e no servidor de desenvolvimento. */
   ytDlpStatus?(): Promise<YtDlpStatus>
   listLibrary(): Promise<LibraryEntry[]>
+  /** Abre a pasta do arquivo da faixa no Finder (ou no gerenciador de arquivos), com ele marcado. */
+  revealTrack?(hash: string): Promise<void>
+  /**
+   * Tira a faixa da biblioteca e das playlists. O arquivo do usuário fica onde está; o baixado
+   * pelo "Importar de URL" é apagado, para um novo download não reaproveitar a versão antiga.
+   */
   removeFromLibrary(hash: string): Promise<void>
   saveAnalysis(hash: string, analysis: TrackAnalysis, peaks: Uint8Array): Promise<void>
   saveEdits(hash: string, edits: UserEdits): Promise<void>
@@ -103,6 +126,8 @@ export interface HostApi {
    * URL"), ou null se não há. Opcional: a versão web não tem ffmpeg para extrair.
    */
   getCover?(hash: string): Promise<Uint8Array | null>
+  /** Formato, bitrate, taxa de amostragem e tamanho do arquivo; null se não achou o arquivo. */
+  getAudioInfo?(hash: string): Promise<AudioInfo | null>
   listPlaylists(): Promise<Playlist[]>
   /** Cria ou substitui a playlist inteira. */
   savePlaylist(playlist: Playlist): Promise<void>

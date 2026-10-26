@@ -3,11 +3,12 @@
 // (host/service.ts) atrás de HTTP. Serve para desenvolver sem abrir o Electron e para os testes
 // de interface. Os diálogos nativos viram respostas enfileiradas pela página (POST /dev/dialog).
 // Uso: pnpm --filter @djmixer/desktop dev:web  (DJMIXER_DATA_DIR muda a pasta de dados)
+import { spawn } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 import { mkdirSync } from 'node:fs'
 import { createServer as createHttpServer, type IncomingMessage } from 'node:http'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { decodeRpc, encodeRpc } from './rpc.ts'
 import { createHostService, type Dialogs } from './service.ts'
 
@@ -23,6 +24,13 @@ const dialogs: Dialogs = {
   pickProjectToSave: async () => next<string | null>(null),
   pickExportPath: async () => next<string | null>(null),
   locateTrack: async () => next<string | null>(null),
+  // No servidor de desenvolvimento, abre o gerenciador de arquivos da máquina que roda o servidor.
+  async reveal(path) {
+    if (process.platform === 'darwin') spawn('open', ['-R', path], { stdio: 'ignore' })
+    else if (process.platform === 'win32')
+      spawn('explorer', [`/select,${path}`], { stdio: 'ignore' })
+    else spawn('xdg-open', [dirname(path)], { stdio: 'ignore' }).on('error', () => undefined)
+  },
 }
 const service = createHostService(DATA_DIR, dialogs)
 service.prepareTools()

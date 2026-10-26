@@ -4,11 +4,11 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { open, readFile, rename, rm, writeFile, type FileHandle } from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import type { ExportResult, ExportTarget, HostApi, LibraryEntry, YtDlpStatus } from './api.ts'
 import { Library } from './library.ts'
-import { decodeToCache, extractCover, hashFile, probe } from './media.ts'
-import { coverSidecar, downloadAudio } from './url-import.ts'
+import { audioInfo, decodeToCache, extractCover, hashFile, probe } from './media.ts'
+import { coverSidecar, downloadAudio, downloadThumbnail } from './url-import.ts'
 import { createYtDlp } from './ytdlp.ts'
 
 export interface Dialogs {
@@ -17,12 +17,22 @@ export interface Dialogs {
   pickProjectToSave(suggestedName: string): Promise<string | null>
   pickExportPath(suggestedName: string): Promise<string | null>
   locateTrack(entry: LibraryEntry | null): Promise<string | null>
+  /** Mostra o arquivo no Finder (ou no gerenciador de arquivos do sistema). */
+  reveal(path: string): Promise<void>
 }
 
 export type HostService = Omit<
   HostApi,
-  'kind' | 'mediaUrl' | 'importFromUrl' | 'getCover' | 'ytDlpStatus'
+  | 'kind'
+  | 'mediaUrl'
+  | 'importFromUrl'
+  | 'getCover'
+  | 'getAudioInfo'
+  | 'revealTrack'
+  | 'ytDlpStatus'
 > & {
+  revealTrack: NonNullable<HostApi['revealTrack']>
+  getAudioInfo: NonNullable<HostApi['getAudioInfo']>
   importFromUrl: NonNullable<HostApi['importFromUrl']>
   getCover: NonNullable<HostApi['getCover']>
   /** Caminho do arquivo a servir para `mediaUrl`, decodificando se preciso; null se não existe. */
@@ -101,7 +111,28 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
     },
 
     listLibrary: async () => library.list(),
-    removeFromLibrary: async (hash) => library.remove(hash),
+    async removeFromLibrary(hash) {
+      const entry = library.get(hash)
+      library.remove(hash)
+      if (!SAFE_KEY.test(hash)) return
+      const files = [
+        join(decodedDir, `${hash}.f32`),
+        join(coversDir, `${hash}.jpg`),
+        join(coversDir, `${hash}.nocover`),
+      ]
+      // Só apaga o áudio que o próprio app baixou, dentro da pasta de downloads.
+      if (entry?.sourceUrl && dirname(entry.path) === downloadsDir) {
+        files.push(entry.path, coverSidecar(entry.path))
+      }
+      await Promise.all(files.map((file) => rm(file, { force: true })))
+    },
+
+    async revealTrack(hash) {
+      const entry = library.get(hash)
+      if (!entry) throw new Error('faixa não está na biblioteca')
+      if (entry.missing) throw new Error(`arquivo não encontrado: ${entry.path}`)
+      await dialogs.reveal(entry.path)
+    },
     saveAnalysis: async (hash, analysis, peaks) => library.saveAnalysis(hash, analysis, peaks),
     saveEdits: async (hash, edits) => library.saveEdits(hash, edits),
     getPeaks: async (hash) => library.peaks(hash),
@@ -109,17 +140,30 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
     async getCover(hash) {
       if (!SAFE_KEY.test(hash)) return null
       const file = join(coversDir, `${hash}.jpg`)
-      // Faixa sem capa: um arquivo vazio evita procurar de novo a cada abertura.
-      const none = join(coversDir, `${hash}.none`)
+      // Faixa sem capa: um arquivo vazio evita procurar de novo a cada abertura. (O nome mudou de
+      // .none para .nocover quando o app passou a buscar a capa de faixas baixadas antes dela.)
+      const none = join(coversDir, `${hash}.nocover`)
       if (!existsSync(file)) {
         const entry = library.get(hash)
         if (!entry || entry.missing || existsSync(none)) return null
-        if (!(await extractCover([coverSidecar(entry.path), entry.path], file))) {
+        const sidecar = coverSidecar(entry.path)
+        // Baixada antes de o "Importar de URL" trazer a capa: busca só a capa na página.
+        if (entry.sourceUrl && !existsSync(sidecar)) {
+          await downloadThumbnail(entry.sourceUrl, entry.path, () => ytDlp.ensure()).catch(
+            () => undefined,
+          )
+        }
+        if (!(await extractCover([sidecar, entry.path], file))) {
           writeFileSync(none, '')
           return null
         }
       }
       return new Uint8Array(await readFile(file))
+    },
+
+    async getAudioInfo(hash) {
+      const entry = library.get(hash)
+      return entry && !entry.missing ? audioInfo(entry.path) : null
     },
 
     listPlaylists: async () => library.playlists(),

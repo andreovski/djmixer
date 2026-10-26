@@ -5,9 +5,9 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream, existsSync } from 'node:fs'
-import { rename, rm } from 'node:fs/promises'
+import { rename, rm, stat } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
-import { CHANNELS, SAMPLE_RATE } from './api.ts'
+import { CHANNELS, SAMPLE_RATE, type AudioInfo } from './api.ts'
 
 export const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'aif', 'aiff', 'ogg', 'opus']
 
@@ -209,4 +209,51 @@ export function extractCover(sources: string[], target: string): Promise<boolean
     }
     return false
   })
+}
+
+const LOSSLESS = /^(flac|alac|wavpack|ape|tta|pcm_.*)$/
+
+export async function audioInfo(path: string): Promise<AudioInfo> {
+  const json = await run('ffprobe', [
+    '-v',
+    'error',
+    '-print_format',
+    'json',
+    '-show_format',
+    '-show_streams',
+    '-select_streams',
+    'a:0',
+    path,
+  ])
+  const data = JSON.parse(json) as {
+    format?: { format_name?: string; bit_rate?: string }
+    streams?: {
+      codec_name?: string
+      bit_rate?: string
+      sample_rate?: string
+      channels?: number
+      bits_per_raw_sample?: string
+      bits_per_sample?: number
+    }[]
+  }
+  const stream = data.streams?.[0] ?? {}
+  const number = (value: string | number | undefined) => {
+    const n = Number(value)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+  const codec = stream.codec_name ?? '?'
+  const lossless = LOSSLESS.test(codec)
+  const bitrate = number(stream.bit_rate) ?? number(data.format?.bit_rate)
+  return {
+    container: data.format?.format_name ?? '?',
+    codec,
+    bitrateKbps: bitrate ? Math.round(bitrate / 1000) : null,
+    sampleRate: number(stream.sample_rate),
+    bitDepth: lossless
+      ? (number(stream.bits_per_raw_sample) ?? number(stream.bits_per_sample))
+      : null,
+    channels: stream.channels ?? null,
+    bytes: (await stat(path)).size,
+    lossless,
+  }
 }

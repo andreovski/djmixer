@@ -215,6 +215,27 @@ export function createBrowserHost(): HostApi {
       }
     },
 
+    async getAudioInfo(hash) {
+      const track = await get<StoredTrack>(TRACKS, hash)
+      if (!track) return null
+      const extension = track.name.split('.').pop()?.toLowerCase() ?? '?'
+      const lossless = ['wav', 'flac', 'aif', 'aiff'].includes(extension)
+      // Sem ffprobe: o bitrate sai do tamanho e da duração, e o resto o navegador não informa.
+      return {
+        container: extension,
+        codec: extension,
+        bitrateKbps: track.durationSeconds
+          ? Math.round((track.file.size * 8) / track.durationSeconds / 1000)
+          : null,
+        sampleRate: null,
+        bitDepth: null,
+        channels: null,
+        bytes: track.file.size,
+        lossless,
+        estimated: true,
+      }
+    },
+
     async listPlaylists() {
       const playlists = await run<(Playlist & { createdAt?: number })[]>(
         PLAYLISTS,
