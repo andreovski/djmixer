@@ -6,6 +6,7 @@ const METHODS = [
   'pickAudioFiles',
   'importFiles',
   'importFromUrl',
+  'ytDlpStatus',
   'listLibrary',
   'revealTrack',
   'removeFromLibrary',

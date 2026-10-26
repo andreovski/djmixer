@@ -5,10 +5,11 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { open, readFile, rename, rm, writeFile, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
-import type { ExportResult, ExportTarget, HostApi, LibraryEntry } from './api.ts'
+import type { ExportResult, ExportTarget, HostApi, LibraryEntry, YtDlpStatus } from './api.ts'
 import { Library } from './library.ts'
 import { audioInfo, decodeToCache, extractCover, hashFile, probe } from './media.ts'
 import { coverSidecar, downloadAudio, downloadThumbnail } from './url-import.ts'
+import { createYtDlp } from './ytdlp.ts'
 
 export interface Dialogs {
   pickAudioFiles(): Promise<string[]>
@@ -22,7 +23,13 @@ export interface Dialogs {
 
 export type HostService = Omit<
   HostApi,
-  'kind' | 'mediaUrl' | 'importFromUrl' | 'getCover' | 'getAudioInfo' | 'revealTrack'
+  | 'kind'
+  | 'mediaUrl'
+  | 'importFromUrl'
+  | 'getCover'
+  | 'getAudioInfo'
+  | 'revealTrack'
+  | 'ytDlpStatus'
 > & {
   revealTrack: NonNullable<HostApi['revealTrack']>
   getAudioInfo: NonNullable<HostApi['getAudioInfo']>
@@ -30,6 +37,12 @@ export type HostService = Omit<
   getCover: NonNullable<HostApi['getCover']>
   /** Caminho do arquivo a servir para `mediaUrl`, decodificando se preciso; null se não existe. */
   mediaFile(kind: string, key: string): Promise<string | null>
+  /**
+   * Confere se o yt-dlp existe e, se não, baixa o oficial para a pasta de dados. Roda em segundo
+   * plano na abertura do app; o "Importar de URL" espera por ele.
+   */
+  prepareTools(): void
+  ytDlpStatus(): Promise<YtDlpStatus>
   close(): void
 }
 
@@ -45,6 +58,7 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
   for (const dir of [decodedDir, stretchedDir, downloadsDir, coversDir])
     mkdirSync(dir, { recursive: true })
   const library = new Library(join(dataDir, 'library.sqlite'))
+  const ytDlp = createYtDlp({ binDir: join(dataDir, 'bin') })
   const exports = new Map<string, { handle: FileHandle; path: string; bytes: number }>()
 
   const register = async (
@@ -82,7 +96,8 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
     async importFromUrl(url) {
       const entries: LibraryEntry[] = []
       const errors: string[] = []
-      for (const file of await downloadAudio(url.trim(), downloadsDir)) {
+      const files = await downloadAudio(url.trim(), downloadsDir, () => ytDlp.ensure())
+      for (const file of files) {
         try {
           entries.push(await register(file.path, undefined, file.pageUrl))
         } catch (error) {
@@ -134,7 +149,9 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
         const sidecar = coverSidecar(entry.path)
         // Baixada antes de o "Importar de URL" trazer a capa: busca só a capa na página.
         if (entry.sourceUrl && !existsSync(sidecar)) {
-          await downloadThumbnail(entry.sourceUrl, entry.path).catch(() => undefined)
+          await downloadThumbnail(entry.sourceUrl, entry.path, () => ytDlp.ensure()).catch(
+            () => undefined,
+          )
         }
         if (!(await extractCover([sidecar, entry.path], file))) {
           writeFileSync(none, '')
@@ -250,6 +267,11 @@ export function createHostService(dataDir: string, dialogs: Dialogs): HostServic
       await job.handle.close()
       await rm(job.path, { force: true })
     },
+
+    prepareTools() {
+      ytDlp.ensure().catch((error: unknown) => console.warn(String(error)))
+    },
+    ytDlpStatus: async () => ytDlp.status(),
 
     close: () => library.close(),
   }

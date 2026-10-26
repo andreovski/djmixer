@@ -40,6 +40,7 @@ const METHODS = [
   'pickAudioFiles',
   'importFiles',
   'importFromUrl',
+  'ytDlpStatus',
   'listLibrary',
   'revealTrack',
   'removeFromLibrary',
@@ -125,6 +126,8 @@ const dialogs: Dialogs = {
 
 app.whenReady().then(() => {
   const service: HostService = createHostService(app.getPath('userData'), dialogs)
+  // Na abertura: confere se há yt-dlp e, se não, baixa o oficial em segundo plano.
+  service.prepareTools()
 
   ipcMain.handle('host', (_event, method: string, ...args: unknown[]) => {
     if (!(METHODS as readonly string[]).includes(method))

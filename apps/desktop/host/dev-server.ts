@@ -33,6 +33,7 @@ const dialogs: Dialogs = {
   },
 }
 const service = createHostService(DATA_DIR, dialogs)
+service.prepareTools()
 
 const body = async (request: IncomingMessage) => {
   const chunks: Buffer[] = []
@@ -59,7 +60,12 @@ createHttpServer(async (request, response) => {
     if (request.method === 'POST' && api) {
       const method = api[1] as keyof typeof service
       const fn = service[method] as unknown
-      if (typeof fn !== 'function' || method === 'close' || method === 'mediaFile') {
+      if (
+        typeof fn !== 'function' ||
+        method === 'close' ||
+        method === 'mediaFile' ||
+        method === 'prepareTools'
+      ) {
         response.writeHead(404).end()
         return
       }
